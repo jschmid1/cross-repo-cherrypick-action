@@ -72,13 +72,22 @@ export class Backport {
       }
 
       // check if the pull request has the trigger label
-      if (mainpr.labels && Array.isArray(mainpr.labels) && this.config.trigger_label) {
-        if (!mainpr.labels.some(label => label.name === this.config.trigger_label)) {
+      if (
+        mainpr.labels &&
+        Array.isArray(mainpr.labels) &&
+        this.config.trigger_label
+      ) {
+        if (
+          !mainpr.labels.some(
+            (label) => label.name === this.config.trigger_label,
+          )
+        ) {
           // Abort in case there is no matching label
           console.log(`Pull request #${pull_number} has no matching label`);
           return;
         }
       }
+      console.log("Pull request has a matching label");
 
       const target = branch_map.get(mainpr.base.ref) ?? mainpr.base.ref;
       console.log(`Target branch for backport: ${target}`);

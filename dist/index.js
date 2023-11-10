@@ -84,12 +84,18 @@ class Backport {
                     });
                     return;
                 }
-                //  Determines the target value based on the `baseref` key from the `branch_map` Map object.
-                //  If `baseref` exists as a key in `branch_map`, the corresponding value is used.
-                //  If `baseref` does not exist in `branch_map`, `baseref` itself is used as the target value.
-                //  The result is stored in the `target` constant.
-                console.log(branch_map);
+                // check if the pull request has the trigger label
+                if (mainpr.labels &&
+                    Array.isArray(mainpr.labels) &&
+                    this.config.trigger_label) {
+                    if (!mainpr.labels.some((label) => label.name === this.config.trigger_label)) {
+                        // Abort in case there is no matching label
+                        console.log(`Pull request #${pull_number} has no matching label`);
+                        return;
+                    }
+                }
                 const target = (_c = branch_map.get(mainpr.base.ref)) !== null && _c !== void 0 ? _c : mainpr.base.ref;
+                console.log(`Target branch for backport: ${target}`);
                 console.log(`Fetching all the commits from the pull request: ${mainpr.commits + 1}`);
                 yield this.git.fetch(`refs/pull/${pull_number}/head`, this.config.pwd, mainpr.commits + 1);
                 const commitShas = yield this.github.getCommits(mainpr);
@@ -684,12 +690,13 @@ function run() {
     return __awaiter(this, void 0, void 0, function* () {
         const token = core.getInput("token", { required: true });
         const pwd = core.getInput("github_workspace", { required: true });
+        const trigger_label = core.getInput("trigger_label", { required: true });
+        const upstream_repo = core.getInput("upstream_repo", { required: true });
         const pattern = core.getInput("label_pattern");
         const description = core.getInput("pull_description");
         const title = core.getInput("pull_title");
         const target_branches = core.getInput("target_branches");
         const merge_commits = core.getInput("merge_commits");
-        const upstream_repo = core.getInput("upstream_repo", { required: true });
         const branch_map = core.getInput("branch_map");
         if (merge_commits != "fail" && merge_commits != "skip") {
             const message = `Expected input 'merge_commits' to be either 'fail' or 'skip', but was '${merge_commits}'`;
@@ -709,6 +716,7 @@ function run() {
             branch_map: branch_map !== ""
                 ? new Map(Object.entries(JSON.parse(branch_map)))
                 : new Map(),
+            trigger_label: trigger_label !== "" ? trigger_label : undefined,
         };
         const backport = new backport_1.Backport(github, config, git);
         return backport.run();
