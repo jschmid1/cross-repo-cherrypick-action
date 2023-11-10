@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Create backport pull requests
-        uses: jschmid/cherry-pick-across-remote-action@v2
+        uses: jschmid/cherry-pick-across-remote-action@master
 ```
 
 > **Note**
@@ -124,6 +124,13 @@ If you do not define this option, the action assums that the target branch is id
 Example:
 
 `branch_map: '{"master": "main"}'`
+
+
+### `trigger_label`
+
+Default: `""`
+
+Allows you to specify a label that triggers this action.
 
 
 ## Placeholders

@@ -44,12 +44,17 @@ inputs:
       [Backport ${target_branch}] ${pull_title}
   upstream_repo:
     description: >
-      The repository to backport to.
-      By default, the action will backport to the same repository as the merged pull request.
+      The repository to backport to. Use format `owner/repo`
   branch_map:
     description: >
       A json-formatted mapping of target branches to upstream branches in case they are different.
     default: "{}"
+  trigger_label:
+    description: >
+      The label that triggers the backport action.
+      If the merged pull request has this label, the action will backport it.
+      If the merged pull request does not have this label, the action will do nothing.
+    default: backport to remote
 outputs:
   was_successful:
     description: >

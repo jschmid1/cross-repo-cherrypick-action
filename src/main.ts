@@ -12,12 +12,13 @@ import { execa } from "execa";
 async function run(): Promise<void> {
   const token = core.getInput("token", { required: true });
   const pwd = core.getInput("github_workspace", { required: true });
+  const trigger_label = core.getInput("trigger_label", { required: true });
+  const upstream_repo = core.getInput("upstream_repo", { required: true });
   const pattern = core.getInput("label_pattern");
   const description = core.getInput("pull_description");
   const title = core.getInput("pull_title");
   const target_branches = core.getInput("target_branches");
   const merge_commits = core.getInput("merge_commits");
-  const upstream_repo = core.getInput("upstream_repo", { required: true });
   const branch_map = core.getInput("branch_map");
 
   if (merge_commits != "fail" && merge_commits != "skip") {
@@ -40,6 +41,7 @@ async function run(): Promise<void> {
       branch_map !== ""
         ? new Map<string, string>(Object.entries(JSON.parse(branch_map)))
         : new Map<string, string>(),
+    trigger_label: trigger_label !== "" ? trigger_label : undefined,
   };
   const backport = new Backport(github, config, git);
 
