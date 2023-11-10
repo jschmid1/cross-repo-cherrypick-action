@@ -1,0 +1,67 @@
+name: Cross Repo Cherrypick Action
+description: >
+  Cherry pick commits of pull requests to target branches of a remote resoitory.
+author: jschmid1
+inputs:
+  token:
+    description: >
+      Token to authenticate requests to GitHub.
+      Used to create and label pull requests and to comment.
+      Either GITHUB_TOKEN or a repo-scoped Personal Access Token (PAT).
+    default: ${{ github.token }}
+  github_workspace:
+    description: Working directory for the backport action.
+    default: ${{ github.workspace }}
+  label_pattern:
+    description: >
+      Regex pattern to match the backport labels on the merged pull request.
+      Must contain a capture group for the target branch.
+      The action will backport the pull request to each matched target branch.
+      Note that the pull request's headref is excluded automatically.
+    default: ^backport ([^ ]+)$
+  merge_commits:
+    description: >
+      Specifies how the action should deal with merge commits on the merged pull request.
+      When set to `fail` the backport fails when the action detects one or more merge commits.
+      When set to `skip` the action only cherry-picks non-merge commits, i.e. it ignores merge commits.
+    default: fail
+  pull_description:
+    description: >
+      Template used as description (i.e. body) in the pull requests created by this action.
+      Placeholders can be used to define variable values.
+      These are indicated by a dollar sign and curly braces (`${placeholder}`).
+      Please refer to this action's README for all available placeholders.
+    default: |-
+      # Description
+      Backport of #${pull_number} to `${target_branch}`.
+  pull_title:
+    description: >
+      Template used as the title in the pull requests created by this action.
+      Placeholders can be used to define variable values.
+      These are indicated by a dollar sign and curly braces (`${placeholder}`).
+      Please refer to this action's README for all available placeholders.
+    default: >-
+      [Backport ${target_branch}] ${pull_title}
+  upstream_repo:
+    description: >
+      The repository to backport to.
+      By default, the action will backport to the same repository as the merged pull request.
+  branch_map:
+    description: >
+      A json-formatted mapping of target branches to upstream branches in case they are different.
+    default: "{}"
+outputs:
+  was_successful:
+    description: >
+      Whether or not the changes could be backported successfully to all targets.
+      Either 'true' or 'false'.
+  was_successful_by_target:
+    description: >
+      Whether or not the changes could be backported successfully to all targets - broken down by target.
+      Follows the pattern '{{label}}=true|false'.
+runs:
+  using: "node20"
+  main: "dist/index.js"
+branding:
+  icon: 'copy'
+  color: 'yellow'
