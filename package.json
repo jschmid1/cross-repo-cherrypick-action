@@ -1,6 +1,6 @@
 {
   "name": "cross-repo-cherrypick-action",
-  "version": "1.0.0",
+  "version": "1.0.0-SNAPSHOT",
   "private": false,
   "description": "GitHub action to automatically backport pull requests",
   "main": "lib/main.js",
