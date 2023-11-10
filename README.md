@@ -1,7 +1,6 @@
-# Cross Fork Cherry Picks
+# Cross Repo Cherrypicks
 
-This project is a GitHub action that automates the process of backporting merged pullrequests to another repository. This can be a direct fork
-or just a related repository.
+This project provides a GitHub Action designed to streamline the backporting of merged pull requests to another repository. This could be a direct fork or any other related repository.
 
 ## Features
 
@@ -9,22 +8,19 @@ or just a related repository.
 - Configurable - Use inputs and outputs to fit it to your project
 - Transparent - Informs about its success / Cherry-picks with [`-x`](https://git-scm.com/docs/git-cherry-pick#Documentation/git-cherry-pick.txt--x)
 
-## How it works
+## How it Works
 
-You can specify the `upstream_repo` option to define where the action will backport the PullRequest to.
+The `upstream_repo` option allows you to specify the repository where the action will backport the Pull Request.
 
-Once a pullrequest ( where this action is configured) is merged, we look for a label that can be defined by
-`trigger_label`.
-If such a label is found, the action takes the following steps:
+When a Pull Request (where this action is configured) is merged, the action searches for a label defined by the `trigger_label` option. If this label is present, the action performs the following steps:
 
-1. add the remote and give access via github tokens
-2. fetch and checkout a new branch from the target branch
-3. cherry-pick the merged pull request's commits
-4. create a pull request to merge the new branch into the target branch on the configured `upstream_repo`
-5. comment on the original pull request about its success
+1. Adds the remote and authenticates using GitHub tokens.
+2. Fetches and checks out a new branch from the target branch.
+3. Cherry-picks the commits from the merged Pull Request.
+4. Creates a new Pull Request to merge the new branch into the target branch on the `upstream_repo`.
+5. Posts a comment on the original Pull Request indicating the success of the operation.
 
-If the branch naming convention deviates, for example if the default branch in your repository is `master` and on the `upstream_repo` it is `main` you can use
-the `branch_map` option to account for that.
+If your branch naming convention differs from the standard (for example, if the default branch in your repository is `master` and in the `upstream_repo` it's `main`), you can use the `branch_map` option to handle this discrepancy.
 
 ## Usage
 
