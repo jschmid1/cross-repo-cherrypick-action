@@ -1,4 +1,4 @@
-# Contributing to backport action
+# Contributing to cross-repo cherrypick action
 
 I welcome contributions for feature requests and bug reports, as well as for docs and code changes.
 

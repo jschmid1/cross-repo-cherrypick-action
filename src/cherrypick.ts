@@ -34,7 +34,7 @@ enum Output {
   wasSuccessfulByTarget = "was_successful_by_target",
 }
 
-export class Backport {
+export class CherryPick {
   private github;
   private config;
   private git;
@@ -61,7 +61,7 @@ export class Backport {
       const upstream_name = "upstream";
 
       if (!(await this.github.isMerged(mainpr))) {
-        const message = "Only merged pull requests can be backported.";
+        const message = "Only merged pull requests can be cherry-picked.";
         this.github.createComment({
           owner,
           repo,
@@ -90,7 +90,7 @@ export class Backport {
       console.log("Pull request has a matching label");
 
       const target = branch_map.get(mainpr.base.ref) ?? mainpr.base.ref;
-      console.log(`Target branch for backport: ${target}`);
+      console.log(`Target branch for cherry-pick: ${target}`);
 
       console.log(
         `Fetching all the commits from the pull request: ${mainpr.commits + 1}`,
@@ -116,8 +116,8 @@ export class Backport {
         mergeCommitShas.length > 0 &&
         this.config.commits.merge_commits == "fail"
       ) {
-        const message = dedent`Backport failed because this pull request contains merge commits. \
-          You can either backport this pull request manually, or configure the action to skip merge commits.`;
+        const message = dedent`Cherry-pick failed because this pull request contains merge commits. \
+          You can either cherry-pick this pull request manually, or configure the action to skip merge commits.`;
         console.error(message);
         this.github.createComment({
           owner,
@@ -147,7 +147,7 @@ export class Backport {
 
       // remote logic starts here
       console.log(
-        `Backporting to target branch '${target} to remote '${upstream_name}'`,
+        `Cherry-picking to target branch '${target} to remote '${upstream_name}'`,
       );
       try {
         await this.git.add_remote(
@@ -192,9 +192,9 @@ export class Backport {
       }
 
       try {
-        const branchname = `backport-${pull_number}-to-${target}-to-${upstream_name}`;
+        const branchname = `cherry-pick-${pull_number}-to-${target}-to-${upstream_name}`;
 
-        console.log(`Start backport to ${branchname}`);
+        console.log(`Start cherry-pick to ${branchname}`);
         try {
           await this.git.checkout(
             branchname,
@@ -203,7 +203,7 @@ export class Backport {
             this.config.pwd,
           );
         } catch (error) {
-          const message = this.composeMessageForBackportScriptFailure(
+          const message = this.composeMessageForCherryPickScriptFailure(
             target,
             3,
             baseref,
@@ -225,7 +225,7 @@ export class Backport {
         try {
           await this.git.cherryPick(commitShasToCherryPick, this.config.pwd);
         } catch (error) {
-          const message = this.composeMessageForBackportScriptFailure(
+          const message = this.composeMessageForCherryPickScriptFailure(
             target,
             4,
             baseref,
@@ -390,11 +390,11 @@ export class Backport {
   }
 
   private composeMessageForFetchTargetFailure(target: string) {
-    return dedent`Backport failed for \`${target}\`: couldn't find remote ref \`${target}\`.
+    return dedent`Cherry-pick failed for \`${target}\`: couldn't find remote ref \`${target}\`.
                   Please ensure that this Github repo has a branch named \`${target}\`.`;
   }
 
-  private composeMessageForBackportScriptFailure(
+  private composeMessageForCherryPickScriptFailure(
     target: string,
     exitcode: number,
     baseref: string,
@@ -426,7 +426,7 @@ export class Backport {
                 \`\`\``
         : dedent`Note that rebase and squash merges are not supported at this time.`;
 
-    return dedent`Backport failed for \`${target}\`, ${reason}.
+    return dedent`Cherry-pick failed for \`${target}\`, ${reason}.
 
                   Please cherry-pick the changes locally.
                   ${suggestion}`;
@@ -444,7 +444,7 @@ export class Backport {
   private composeMessageForCreatePRFailed(
     response: CreatePullRequestResponse,
   ): string {
-    return dedent`Backport branch created but failed to create PR.
+    return dedent`Cherry-pick branch created but failed to create PR.
                 Request to create PR rejected with status ${response.status}.
 
                 (see action log for full response)`;
@@ -455,7 +455,7 @@ export class Backport {
     target: string,
     upstream_repo: string,
   ) {
-    return dedent`Successfully created backport PR for \`${target}\`:
+    return dedent`Successfully created cherry-pick PR for \`${target}\`:
                   - https://github.com/${upstream_repo}/pull/${pr_number}`;
   }
 

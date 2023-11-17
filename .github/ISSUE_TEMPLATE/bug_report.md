@@ -13,7 +13,7 @@ A clear and concise description of what the bug is.
 **To Reproduce**
 Steps to reproduce the behavior:
 1. Create and merge a pull request with '...'
-2. Trigger the backport workflow
+2. Trigger the cherry-pick orkflow
 3. See error in '...'
 
 **Expected behavior**
@@ -30,7 +30,7 @@ LOGS
 ```
 
 </p>
-</details> 
+</details>
 
 **Additional context**
 Add any other context about the problem here, e.g. link to a failed workflow run or an affected pull request.

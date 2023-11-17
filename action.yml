@@ -10,19 +10,19 @@ inputs:
       Either GITHUB_TOKEN or a repo-scoped Personal Access Token (PAT).
     default: ${{ github.token }}
   github_workspace:
-    description: Working directory for the backport action.
+    description: Working directory for the cherry-pick action.
     default: ${{ github.workspace }}
   label_pattern:
     description: >
-      Regex pattern to match the backport labels on the merged pull request.
+      Regex pattern to match the cherry-pick labels on the merged pull request.
       Must contain a capture group for the target branch.
-      The action will backport the pull request to each matched target branch.
+      The action will cherry-pick the pull request to each matched target branch.
       Note that the pull request's headref is excluded automatically.
-    default: ^backport ([^ ]+)$
+    default: ^cherry-pick ([^ ]+)$
   merge_commits:
     description: >
       Specifies how the action should deal with merge commits on the merged pull request.
-      When set to `fail` the backport fails when the action detects one or more merge commits.
+      When set to `fail` the cherry-pick fails when the action detects one or more merge commits.
       When set to `skip` the action only cherry-picks non-merge commits, i.e. it ignores merge commits.
     default: fail
   pull_description:
@@ -33,7 +33,7 @@ inputs:
       Please refer to this action's README for all available placeholders.
     default: |-
       # Description
-      Backport of #${pull_number} to `${target_branch}`.
+      cherry-pick of #${pull_number} to `${target_branch}`.
   pull_title:
     description: >
       Template used as the title in the pull requests created by this action.
@@ -41,28 +41,28 @@ inputs:
       These are indicated by a dollar sign and curly braces (`${placeholder}`).
       Please refer to this action's README for all available placeholders.
     default: >-
-      [Backport ${target_branch}] ${pull_title}
+      [cherry-pick ${target_branch}] ${pull_title}
   upstream_repo:
     description: >
-      The repository to backport to. Use format `owner/repo`
+      The repository to cherry-pick to. Use format `owner/repo`
   branch_map:
     description: >
       A json-formatted mapping of target branches to upstream branches in case they are different.
     default: "{}"
   trigger_label:
     description: >
-      The label that triggers the backport action.
-      If the merged pull request has this label, the action will backport it.
+      The label that triggers the cherry-pick action.
+      If the merged pull request has this label, the action will cherry-pick it.
       If the merged pull request does not have this label, the action will do nothing.
-    default: backport to remote
+    default: cherry-pick to remote
 outputs:
   was_successful:
     description: >
-      Whether or not the changes could be backported successfully to all targets.
+      Whether or not the changes could be cherry-picked successfully to all targets.
       Either 'true' or 'false'.
   was_successful_by_target:
     description: >
-      Whether or not the changes could be backported successfully to all targets - broken down by target.
+      Whether or not the changes could be cherry-picked successfully to all targets - broken down by target.
       Follows the pattern '{{label}}=true|false'.
 runs:
   using: "node20"

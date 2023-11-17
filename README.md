@@ -1,6 +1,6 @@
 # Cross Repo Cherrypicks
 
-This project provides a GitHub Action designed to streamline the backporting of merged pull requests to another repository. This could be a direct fork or any other related repository.
+This project provides a GitHub Action designed to streamline the cherry-picking of commits in a merged pull requests to another repository. This could be a direct fork or any other related repository.
 
 ## Features
 
@@ -35,8 +35,8 @@ permissions:
   contents: write # so it can comment
   pull-requests: write # so it can create pull requests
 jobs:
-  backport:
-    name: Backport pull request to another remote
+  cherrypick:
+    name: cherrypick commits from pull request to another remote
     runs-on: ubuntu-latest
     # Don't run on closed unmerged pull requests
     if: github.event.pull_request.merged
@@ -71,7 +71,7 @@ Either `GITHUB_TOKEN` or a repo-scoped [Personal Access Token](https://docs.gith
 
 Default: `${{ github.workspace }}`
 
-Working directory for the backport action.
+Working directory for the cherrypick action.
 
 ### `merge_commits`
 
@@ -79,7 +79,7 @@ Default: `fail`
 
 Specifies how the action should deal with merge commits on the merged pull request.
 
-- When set to `fail` the backport fails when the action detects one or more merge commits.
+- When set to `fail` the cherry-pick fails when the action detects one or more merge commits.
 - When set to `skip` the action only cherry-picks non-merge commits, i.e. it ignores merge commits.
   This can be useful when you [keep your pull requests in sync with the base branch using merge commits](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/keeping-your-pull-request-in-sync-with-the-base-branch).
 
@@ -88,7 +88,7 @@ Specifies how the action should deal with merge commits on the merged pull reque
 Default:
 ```
 # Description
-Backport of #${pull_number} to `${target_branch}`.
+cherry-pick of #${pull_number} to `${target_branch}`.
 ```
 
 Template used as description (i.e. body) in the pull requests created by this action.
@@ -99,7 +99,7 @@ Please refer to this action's README for all available [placeholders](#placehold
 
 ### `pull_title`
 
-Default: `[Backport ${target_branch}] ${pull_title}`
+Default: `[cherry-pick ${target_branch}] ${pull_title}`
 
 Template used as the title in the pull requests created by this action.
 
@@ -137,8 +137,8 @@ The following placeholders are available and are replaced with:
 Placeholder | Replaced with
 ------------|------------
 `pull_author` | The username of the original pull request's author, e.g. `jschmid1`
-`pull_number` | The number of the original pull request that is backported, e.g. `123`
-`pull_title` | The title of the original pull request that is backported, e.g. `fix: some error`
+`pull_number` | The number of the original pull request that is cherry-picked, e.g. `123`
+`pull_title` | The title of the original pull request that is cherry-picked, e.g. `fix: some error`
 
 ## Outputs
 
@@ -146,5 +146,5 @@ The action provides the following [outputs](https://docs.github.com/en/actions/u
 
 Output | Description
 -------|------------
-`was_successful` | Whether or not the changes could be backported successfully to all targets. Either `true` or `false`.
-`was_successful_by_target` | Whether or not the changes could be backported successfully to all targets - broken down by target. Follows the pattern `{{label}}=true\|false`.
+`was_successful` | Whether or not the changes could be cherry-picked successfully to all targets. Either `true` or `false`.
+`was_successful_by_target` | Whether or not the changes could be cherry-picked successfully to all targets - broken down by target. Follows the pattern `{{label}}=true\|false`.
