@@ -1,5 +1,5 @@
 import * as core from "@actions/core";
-import { Backport, Config } from "./backport";
+import { CherryPick, Config } from "./cherrypick";
 import { Github } from "./github";
 import { Git } from "./git";
 import { execa } from "execa";
@@ -7,7 +7,7 @@ import { execa } from "execa";
 /**
  * Called from the action.yml.
  *
- * Is separated from backport for testing purposes
+ * Is separated from cherry-pick for testing purposes
  */
 async function run(): Promise<void> {
   const token = core.getInput("token", { required: true });
@@ -43,9 +43,9 @@ async function run(): Promise<void> {
         : new Map<string, string>(),
     trigger_label: trigger_label !== "" ? trigger_label : undefined,
   };
-  const backport = new Backport(github, config, git);
+  const cherrypick = new CherryPick(github, config, git);
 
-  return backport.run();
+  return cherrypick.run();
 }
 
 // this would be executed on import in a test file

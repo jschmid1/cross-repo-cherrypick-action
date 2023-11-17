@@ -2,7 +2,7 @@
   "name": "cross-repo-cherrypick-action",
   "version": "1.0.0-SNAPSHOT",
   "private": false,
-  "description": "GitHub action to automatically backport pull requests",
+  "description": "GitHub action to automatically cherry-pick pull requests across remotes",
   "main": "lib/main.js",
   "scripts": {
     "build": "tsc",

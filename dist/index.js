@@ -1,7 +1,7 @@
 require('./sourcemap-register.js');/******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 5859:
+/***/ 7179:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -42,7 +42,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.Backport = void 0;
+exports.CherryPick = void 0;
 const core = __importStar(__nccwpck_require__(2186));
 const dedent_1 = __importDefault(__nccwpck_require__(5281));
 const git_1 = __nccwpck_require__(3374);
@@ -52,7 +52,7 @@ var Output;
     Output["wasSuccessful"] = "was_successful";
     Output["wasSuccessfulByTarget"] = "was_successful_by_target";
 })(Output || (Output = {}));
-class Backport {
+class CherryPick {
     constructor(github, config, git) {
         this.github = github;
         this.config = config;
@@ -75,7 +75,7 @@ class Backport {
                 // define the upstream name for git remote
                 const upstream_name = "upstream";
                 if (!(yield this.github.isMerged(mainpr))) {
-                    const message = "Only merged pull requests can be backported.";
+                    const message = "Only merged pull requests can be cherry-picked.";
                     this.github.createComment({
                         owner,
                         repo,
@@ -94,8 +94,9 @@ class Backport {
                         return;
                     }
                 }
+                console.log("Pull request has a matching label");
                 const target = (_c = branch_map.get(mainpr.base.ref)) !== null && _c !== void 0 ? _c : mainpr.base.ref;
-                console.log(`Target branch for backport: ${target}`);
+                console.log(`Target branch for cherry-pick: ${target}`);
                 console.log(`Fetching all the commits from the pull request: ${mainpr.commits + 1}`);
                 yield this.git.fetch(`refs/pull/${pull_number}/head`, this.config.pwd, mainpr.commits + 1);
                 const commitShas = yield this.github.getCommits(mainpr);
@@ -105,8 +106,8 @@ class Backport {
                 console.log(`Encountered ${(_d = mergeCommitShas.length) !== null && _d !== void 0 ? _d : "no"} merge commits`);
                 if (mergeCommitShas.length > 0 &&
                     this.config.commits.merge_commits == "fail") {
-                    const message = (0, dedent_1.default) `Backport failed because this pull request contains merge commits. \
-          You can either backport this pull request manually, or configure the action to skip merge commits.`;
+                    const message = (0, dedent_1.default) `Cherry-pick failed because this pull request contains merge commits. \
+          You can either cherry-pick this pull request manually, or configure the action to skip merge commits.`;
                     console.error(message);
                     this.github.createComment({
                         owner,
@@ -126,7 +127,7 @@ class Backport {
                 console.log("Will cherry-pick the following commits: " + commitShasToCherryPick);
                 const successByTarget = new Map();
                 // remote logic starts here
-                console.log(`Backporting to target branch '${target} to remote '${upstream_name}'`);
+                console.log(`Cherry-picking to target branch '${target} to remote '${upstream_name}'`);
                 try {
                     yield this.git.add_remote(this.config.upstream_repo, upstream_name, this.config.pwd);
                 }
@@ -168,13 +169,13 @@ class Backport {
                     }
                 }
                 try {
-                    const branchname = `backport-${pull_number}-to-${target}-to-${upstream_name}`;
-                    console.log(`Start backport to ${branchname}`);
+                    const branchname = `cherry-pick-${pull_number}-to-${target}-to-${upstream_name}`;
+                    console.log(`Start cherry-pick to ${branchname}`);
                     try {
                         yield this.git.checkout(branchname, target, upstream_name, this.config.pwd);
                     }
                     catch (error) {
-                        const message = this.composeMessageForBackportScriptFailure(target, 3, baseref, headref, branchname, upstream_name, this.config.upstream_repo);
+                        const message = this.composeMessageForCherryPickScriptFailure(target, 3, baseref, headref, branchname, upstream_name, this.config.upstream_repo);
                         console.error(message);
                         successByTarget.set(target, false);
                         yield this.github.createComment({
@@ -188,7 +189,7 @@ class Backport {
                         yield this.git.cherryPick(commitShasToCherryPick, this.config.pwd);
                     }
                     catch (error) {
-                        const message = this.composeMessageForBackportScriptFailure(target, 4, baseref, headref, branchname, upstream_name, this.config.upstream_repo);
+                        const message = this.composeMessageForCherryPickScriptFailure(target, 4, baseref, headref, branchname, upstream_name, this.config.upstream_repo);
                         console.error(message);
                         successByTarget.set(target, false);
                         yield this.github.createComment({
@@ -299,10 +300,10 @@ class Backport {
         return { title, body };
     }
     composeMessageForFetchTargetFailure(target) {
-        return (0, dedent_1.default) `Backport failed for \`${target}\`: couldn't find remote ref \`${target}\`.
+        return (0, dedent_1.default) `Cherry-pick failed for \`${target}\`: couldn't find remote ref \`${target}\`.
                   Please ensure that this Github repo has a branch named \`${target}\`.`;
     }
-    composeMessageForBackportScriptFailure(target, exitcode, baseref, headref, branchname, remote = "origin", upstream_repo) {
+    composeMessageForCherryPickScriptFailure(target, exitcode, baseref, headref, branchname, remote = "origin", upstream_repo) {
         var _a;
         const reasons = {
             1: "due to an unknown script error",
@@ -324,7 +325,7 @@ class Backport {
                 git cherry-pick -x $ancref..${headref}
                 \`\`\``
             : (0, dedent_1.default) `Note that rebase and squash merges are not supported at this time.`;
-        return (0, dedent_1.default) `Backport failed for \`${target}\`, ${reason}.
+        return (0, dedent_1.default) `Cherry-pick failed for \`${target}\`, ${reason}.
 
                   Please cherry-pick the changes locally.
                   ${suggestion}`;
@@ -334,13 +335,13 @@ class Backport {
         return (0, dedent_1.default) `git push to ${remote} failed for ${target} with exitcode ${exitcode}`;
     }
     composeMessageForCreatePRFailed(response) {
-        return (0, dedent_1.default) `Backport branch created but failed to create PR.
+        return (0, dedent_1.default) `Cherry-pick branch created but failed to create PR.
                 Request to create PR rejected with status ${response.status}.
 
                 (see action log for full response)`;
     }
     composeMessageForSuccess(pr_number, target, upstream_repo) {
-        return (0, dedent_1.default) `Successfully created backport PR for \`${target}\`:
+        return (0, dedent_1.default) `Successfully created cherry-pick PR for \`${target}\`:
                   - https://github.com/${upstream_repo}/pull/${pr_number}`;
     }
     createOutput(successByTarget) {
@@ -350,7 +351,7 @@ class Backport {
         core.setOutput(Output.wasSuccessfulByTarget, byTargetOutput);
     }
 }
-exports.Backport = Backport;
+exports.CherryPick = CherryPick;
 
 
 /***/ }),
@@ -677,14 +678,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(2186));
-const backport_1 = __nccwpck_require__(5859);
+const cherrypick_1 = __nccwpck_require__(7179);
 const github_1 = __nccwpck_require__(5928);
 const git_1 = __nccwpck_require__(3374);
 const execa_1 = __nccwpck_require__(7845);
 /**
  * Called from the action.yml.
  *
- * Is separated from backport for testing purposes
+ * Is separated from cherry-pick for testing purposes
  */
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
@@ -718,8 +719,8 @@ function run() {
                 : new Map(),
             trigger_label: trigger_label !== "" ? trigger_label : undefined,
         };
-        const backport = new backport_1.Backport(github, config, git);
-        return backport.run();
+        const cherrypick = new cherrypick_1.CherryPick(github, config, git);
+        return cherrypick.run();
     });
 }
 // this would be executed on import in a test file
@@ -737,9 +738,9 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.replacePlaceholders = void 0;
 /**
  * @param template The template potentially containing placeholders
- * @param main The main pull request that is backported
+ * @param main The main pull request that is cherry-picked
  * @param target The target branchname
- * @returns Description that can be used in the backport pull request
+ * @returns Description that can be used in the cherry-picked pull request
  */
 function replacePlaceholders(template, main, target, owner = "", repo = "") {
     return template

@@ -2,9 +2,9 @@ import { PullRequest } from "./github";
 
 /**
  * @param template The template potentially containing placeholders
- * @param main The main pull request that is backported
+ * @param main The main pull request that is cherry-picked
  * @param target The target branchname
- * @returns Description that can be used in the backport pull request
+ * @returns Description that can be used in the cherry-picked pull request
  */
 export function replacePlaceholders(
   template: string,
