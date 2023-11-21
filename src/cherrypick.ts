@@ -300,7 +300,7 @@ export class CherryPick {
         }
         const new_pr = new_pr_response.data;
 
-        const reviewer = mainpr.merged_by.login;
+        const reviewer = mainpr.merged_by ? mainpr.merged_by.login : null;
         if (reviewer) {
           console.info("Setting reviewer " + reviewer);
           const reviewRequest = {
