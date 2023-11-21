@@ -60,16 +60,16 @@ export class CherryPick {
       // define the upstream name for git remote
       const upstream_name = "upstream";
 
-      if (!(await this.github.isMerged(mainpr))) {
-        const message = "Only merged pull requests can be cherry-picked.";
-        this.github.createComment({
-          owner,
-          repo,
-          issue_number: pull_number,
-          body: message,
-        });
-        return;
-      }
+      // if (!(await this.github.isMerged(mainpr))) {
+      //   const message = "Only merged pull requests can be cherry-picked.";
+      //   this.github.createComment({
+      //     owner,
+      //     repo,
+      //     issue_number: pull_number,
+      //     body: message,
+      //   });
+      //   return;
+      // }
 
       // check if the pull request has the trigger label
       if (
