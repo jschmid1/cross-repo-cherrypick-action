@@ -128,7 +128,27 @@ export class CherryPick {
         return;
       }
 
-      let commitShasToCherryPick = commitShas;
+      let commitShasToCherryPick: string[];
+
+      if (mainpr.commits == 1) {
+        // if the Pr only has one commit, we don't care
+        // if the Pr was squashed or rebased
+        commitShasToCherryPick = commitShas;
+      } else {
+        // find out if "squashed and merged" or "rebased and merged"
+        if (await this.github.isSquashed(mainpr)) {
+          console.log("PR was squashed and merged");
+          // if squashed, then use the merge commit sha
+          commitShasToCherryPick = [
+            await this.github.getMergeCommitSha(mainpr),
+          ]?.filter(Boolean) as string[];
+        } else {
+          // if rebased, then use all the commits from the original PR
+          console.log("PR was rebased and merged");
+          commitShasToCherryPick = commitShas;
+        }
+      }
+
       if (
         mergeCommitShas.length > 0 &&
         this.config.commits.merge_commits == "skip"
@@ -174,7 +194,8 @@ export class CherryPick {
       }
 
       try {
-        await this.git.fetch(target, this.config.pwd, 1, upstream_name);
+        await this.git.fetch(target, this.config.pwd, 3, upstream_name);
+        await this.git.fetch(target, this.config.pwd, 3, "origin");
       } catch (error) {
         if (error instanceof GitRefNotFoundError) {
           const message = this.composeMessageForFetchTargetFailure(error.ref);
@@ -220,6 +241,7 @@ export class CherryPick {
             issue_number: pull_number,
             body: message,
           });
+          return;
         }
 
         try {
@@ -242,6 +264,7 @@ export class CherryPick {
             issue_number: pull_number,
             body: message,
           });
+          return;
         }
 
         console.info(`Push branch ${branchname} to remote ${upstream_name}`);
@@ -264,6 +287,7 @@ export class CherryPick {
             issue_number: pull_number,
             body: message,
           });
+          return;
         }
 
         const [upstream_owner, upstream_repo] =
