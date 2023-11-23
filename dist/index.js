@@ -59,7 +59,7 @@ class CherryPick {
         this.git = git;
     }
     run() {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e;
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const payload = this.github.getPayload();
@@ -117,7 +117,27 @@ class CherryPick {
                     });
                     return;
                 }
-                let commitShasToCherryPick = commitShas;
+                let commitShasToCherryPick;
+                if (mainpr.commits == 1) {
+                    // if the Pr only has one commit, we don't care
+                    // if the Pr was squashed or rebased
+                    commitShasToCherryPick = commitShas;
+                }
+                else {
+                    // find out if "squashed and merged" or "rebased and merged"
+                    if (yield this.github.isSquashed(mainpr)) {
+                        console.log("PR was squashed and merged");
+                        // if squashed, then use the merge commit sha
+                        commitShasToCherryPick = (_e = [
+                            yield this.github.getMergeCommitSha(mainpr),
+                        ]) === null || _e === void 0 ? void 0 : _e.filter(Boolean);
+                    }
+                    else {
+                        // if rebased, then use all the commits from the original PR
+                        console.log("PR was rebased and merged");
+                        commitShasToCherryPick = commitShas;
+                    }
+                }
                 if (mergeCommitShas.length > 0 &&
                     this.config.commits.merge_commits == "skip") {
                     console.log("Skipping merge commits: " + mergeCommitShas);
@@ -150,7 +170,8 @@ class CherryPick {
                     }
                 }
                 try {
-                    yield this.git.fetch(target, this.config.pwd, 1, upstream_name);
+                    yield this.git.fetch(target, this.config.pwd, 3, upstream_name);
+                    yield this.git.fetch(target, this.config.pwd, 3, "origin");
                 }
                 catch (error) {
                     if (error instanceof git_1.GitRefNotFoundError) {
@@ -184,6 +205,7 @@ class CherryPick {
                             issue_number: pull_number,
                             body: message,
                         });
+                        return;
                     }
                     try {
                         yield this.git.cherryPick(commitShasToCherryPick, this.config.pwd);
@@ -198,6 +220,7 @@ class CherryPick {
                             issue_number: pull_number,
                             body: message,
                         });
+                        return;
                     }
                     console.info(`Push branch ${branchname} to remote ${upstream_name}`);
                     const pushExitCode = yield this.git.push(branchname, upstream_name, this.config.pwd);
@@ -211,6 +234,7 @@ class CherryPick {
                             issue_number: pull_number,
                             body: message,
                         });
+                        return;
                     }
                     const [upstream_owner, upstream_repo] = this.extractOwnerRepoFromUpstreamRepo(this.config.upstream_repo);
                     console.info(`Create PR for ${branchname}`);
@@ -618,6 +642,85 @@ class Github {
                 commits.push(...commitsOnPage);
             }
             return commits;
+        });
+    }
+    getMergeCommitSha(pull) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return pull.merge_commit_sha;
+        });
+    }
+    getCommit(sha) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const commit = __classPrivateFieldGet(this, _Github_octokit, "f").rest.repos.getCommit(Object.assign(Object.assign({}, this.getRepo()), { ref: sha }));
+            return commit;
+        });
+    }
+    /**
+     * Retrieves the parent commit SHA of a given commit.
+     * If the commit is a merge commit, it returns the SHA of the first parent commit.
+     * @param sha - The SHA of the commit.
+     * @returns The SHA of the parent commit.
+     */
+    getParent(sha) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const commit = yield this.getCommit(sha);
+            // a commit has a parent. If it has more than one parent it is an indication
+            // that it is a merge commit. The first parent is the commit that was merged
+            // we can safely ignore the second parent as we're checking if the commit isn't a
+            // merge commit before.
+            return commit.data.parents[0].sha;
+        });
+    }
+    /**
+     * Retrieves the pull requests associated with a specific commit.
+     * @param sha The SHA of the commit.
+     * @returns A promise that resolves to the pull requests associated with the commit.
+     */
+    getPullRequestsAssociatedWithCommit(sha) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const pr = __classPrivateFieldGet(this, _Github_octokit, "f").rest.repos.listPullRequestsAssociatedWithCommit(Object.assign(Object.assign({}, this.getRepo()), { commit_sha: sha }));
+            return pr;
+        });
+    }
+    /**
+     * Checks if a given SHA is associated with a specific pull request.
+     * @param sha - The SHA of the commit.
+     * @param pull - The pull request to check against.
+     * @returns A boolean indicating whether the SHA is associated with the pull request.
+     */
+    isShaAssociatedWithPullRequest(sha, pull) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const assoc_pr = yield this.getPullRequestsAssociatedWithCommit(sha);
+            const assoc_pr_data = assoc_pr.data;
+            // commits can be associated with multiple PRs
+            // checks if any of the assoc_prs is the same as the pull
+            return assoc_pr_data.some((pr) => pr.number == pull.number);
+        });
+    }
+    /**
+     * Checks if a pull request is "squashed and merged"
+     * or "rebased and merged"
+     * @param pull - The pull request to check.
+     * @returns A promise that resolves to a boolean indicating whether the pull request is squashed and merged.
+     */
+    isSquashed(pull) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const merge_commit_sha = yield this.getMergeCommitSha(pull);
+            if (!merge_commit_sha) {
+                console.log("likely not merged yet.");
+                return false;
+            }
+            // To detect if this was a rebase and merge, we can verify
+            // that the parent of the merge commit is associated with the pull request
+            // if it is, we have a "rebase and merge".
+            // if it is not, we have a "squash and merge".
+            const parent_commit = yield this.getParent(merge_commit_sha);
+            const is_associated = (yield this.isShaAssociatedWithPullRequest(parent_commit, pull)) &&
+                (yield this.isShaAssociatedWithPullRequest(merge_commit_sha, pull));
+            if (is_associated) {
+                return false;
+            }
+            return true;
         });
     }
     createPR(pr) {
