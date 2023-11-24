@@ -118,25 +118,18 @@ class CherryPick {
                     return;
                 }
                 let commitShasToCherryPick;
-                if (mainpr.commits == 1) {
-                    // if the Pr only has one commit, we don't care
-                    // if the Pr was squashed or rebased
-                    commitShasToCherryPick = commitShas;
+                // find out if "squashed and merged" or "rebased and merged"
+                if ((yield this.github.isSquashed(mainpr)) || mainpr.commits == 1) {
+                    console.log("PR was squashed and merged");
+                    // if squashed, then use the merge_commit_sha
+                    commitShasToCherryPick = (_e = [
+                        yield this.github.getMergeCommitSha(mainpr),
+                    ]) === null || _e === void 0 ? void 0 : _e.filter(Boolean);
                 }
                 else {
-                    // find out if "squashed and merged" or "rebased and merged"
-                    if (yield this.github.isSquashed(mainpr)) {
-                        console.log("PR was squashed and merged");
-                        // if squashed, then use the merge commit sha
-                        commitShasToCherryPick = (_e = [
-                            yield this.github.getMergeCommitSha(mainpr),
-                        ]) === null || _e === void 0 ? void 0 : _e.filter(Boolean);
-                    }
-                    else {
-                        // if rebased, then use all the commits from the original PR
-                        console.log("PR was rebased and merged");
-                        commitShasToCherryPick = commitShas;
-                    }
+                    // if rebased, then use all the commits from the original PR
+                    console.log("PR was rebased and merged");
+                    commitShasToCherryPick = commitShas;
                 }
                 if (mergeCommitShas.length > 0 &&
                     this.config.commits.merge_commits == "skip") {
