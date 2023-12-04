@@ -19,7 +19,10 @@ export interface GithubApi {
   getCommits(pull: PullRequest): Promise<string[]>;
   createPR(pr: CreatePullRequest): Promise<CreatePullRequestResponse>;
   requestReviewers(request: ReviewRequest): Promise<RequestReviewersResponse>;
-  isSquashed(pull: PullRequest): Promise<boolean>;
+  mergeStrategy(
+    pull: PullRequest,
+    merge_commit_sha: string | null,
+  ): Promise<string | null>;
   getMergeCommitSha(pull: PullRequest): Promise<string | null>;
 }
 
@@ -121,19 +124,24 @@ export class Github implements GithubApi {
     return commit;
   }
 
+  public async createPR(pr: CreatePullRequest) {
+    console.log(`Create PR: ${pr.body}`);
+    return this.#octokit.rest.pulls.create(pr);
+  }
+
+  public async requestReviewers(request: ReviewRequest) {
+    console.log(`Request reviewers: ${request.reviewers}`);
+    return this.#octokit.rest.pulls.requestReviewers(request);
+  }
+
   /**
-   * Retrieves the parent commit SHA of a given commit.
-   * If the commit is a merge commit, it returns the SHA of the first parent commit.
+   * Retrieves the parents of a commit.
    * @param sha - The SHA of the commit.
-   * @returns The SHA of the parent commit.
+   * @returns A promise that resolves to the parents of the commit.
    */
-  public async getParent(sha: string) {
+  public async getParents(sha: string) {
     const commit = await this.getCommit(sha);
-    // a commit has a parent. If it has more than one parent it is an indication
-    // that it is a merge commit. The first parent is the commit that was merged
-    // we can safely ignore the second parent as we're checking if the commit isn't a
-    // merge commit before.
-    return commit.data.parents[0].sha;
+    return commit.data.parents;
   }
 
   /**
@@ -164,40 +172,113 @@ export class Github implements GithubApi {
   }
 
   /**
-   * Checks if a pull request is "squashed and merged"
-   * or "rebased and merged"
-   * @param pull - The pull request to check.
-   * @returns A promise that resolves to a boolean indicating whether the pull request is squashed and merged.
+   * Checks if a commit is a merge commit.
+   * @param parents - An array of parent commit hashes.
+   * @returns A promise that resolves to a boolean indicating whether the commit is a merge commit.
    */
-  public async isSquashed(pull: PullRequest): Promise<boolean> {
-    const merge_commit_sha = await this.getMergeCommitSha(pull);
-    if (!merge_commit_sha) {
-      console.log("likely not merged yet.");
-      return false;
-    }
-    // To detect if this was a rebase and merge, we can verify
-    // that the parent of the merge commit is associated with the pull request
-    // if it is, we have a "rebase and merge".
-    // if it is not, we have a "squash and merge".
-    const parent_commit = await this.getParent(merge_commit_sha);
-    const is_associated =
-      (await this.isShaAssociatedWithPullRequest(parent_commit, pull)) &&
-      (await this.isShaAssociatedWithPullRequest(merge_commit_sha, pull));
-    if (is_associated) {
-      return false;
-    }
-    return true;
+  public async isMergeCommit(parents: any[]): Promise<boolean> {
+    return parents.length > 1;
   }
 
-  public async createPR(pr: CreatePullRequest) {
-    console.log(`Create PR: ${pr.body}`);
-    return this.#octokit.rest.pulls.create(pr);
+  /**
+   * Checks if a pull request is rebased.
+   * @param first_parent_belongs_to_pr - Indicates if the parent belongs to a pull request.
+   * @param merge_belongs_to_pr - Indicates if the merge belongs to a pull request.
+   * @param pull - The pull request object.
+   * @returns A boolean value indicating if the pull request is rebased.
+   */
+  public async isRebased(
+    first_parent_belongs_to_pr: boolean,
+    merge_belongs_to_pr: boolean,
+    pull: PullRequest,
+  ): Promise<boolean> {
+    return first_parent_belongs_to_pr && merge_belongs_to_pr;
   }
 
-  public async requestReviewers(request: ReviewRequest) {
-    console.log(`Request reviewers: ${request.reviewers}`);
-    return this.#octokit.rest.pulls.requestReviewers(request);
+  /**
+   * Checks if a merge commit is squashed.
+   * @param first_parent_belongs_to_pr - Indicates if the parent commit belongs to a pull request.
+   * @param merge_belongs_to_pr - Indicates if the merge commit belongs to a pull request.
+   * @returns A boolean value indicating if the merge commit is squashed.
+   */
+  public async isSquashed(
+    first_parent_belongs_to_pr: boolean,
+    merge_belongs_to_pr: boolean,
+  ): Promise<boolean> {
+    return !first_parent_belongs_to_pr && merge_belongs_to_pr;
   }
+
+  /**
+   * Determines the merge strategy used for a given pull request.
+   *
+   * @param pull - The pull request to analyze.
+   * @returns The merge strategy used for the pull request.
+   */
+  public async mergeStrategy(
+    pull: PullRequest,
+    merge_commit_sha: string | null,
+  ) {
+    if (merge_commit_sha == null) {
+      console.log(
+        "PR was merged without merge_commit_sha unable to detect merge method",
+      );
+      return MergeStrategy.UNKNOWN;
+    }
+
+    const parents = await this.getParents(merge_commit_sha);
+
+    if (await this.isMergeCommit(parents)) {
+      console.log("PR was merged using a merge commit");
+      return MergeStrategy.MERGECOMMIT;
+    }
+
+    // if there is only one commit, it is a rebase OR a squash but we treat it
+    // as a squash.
+    if (pull.commits == 1) {
+      console.log(
+        "PR was merged using a squash or a rebase. Choosing squash strategy.",
+      );
+      return MergeStrategy.SQUASHED;
+    }
+
+    // Prepare the data for the rebase and squash checks.
+    const first_parent_sha = parents[0].sha;
+    const first_parent_belonts_to_pr =
+      await this.isShaAssociatedWithPullRequest(first_parent_sha, pull);
+    const merge_belongs_to_pr = await this.isShaAssociatedWithPullRequest(
+      merge_commit_sha,
+      pull,
+    );
+
+    // This is the case when the PR is merged using a rebase.
+    // and has multiple commits.
+    if (
+      await this.isRebased(
+        first_parent_belonts_to_pr,
+        merge_belongs_to_pr,
+        pull,
+      )
+    ) {
+      console.log("PR was merged using a rebase");
+      return MergeStrategy.REBASED;
+    }
+
+    if (
+      await this.isSquashed(first_parent_belonts_to_pr, merge_belongs_to_pr)
+    ) {
+      console.log("PR was merged using a squash");
+      return MergeStrategy.SQUASHED;
+    }
+
+    return MergeStrategy.UNKNOWN;
+  }
+}
+
+export enum MergeStrategy {
+  SQUASHED = "squashed",
+  REBASED = "rebased",
+  MERGECOMMIT = "mergecommit",
+  UNKNOWN = "unknown",
 }
 
 export type PullRequest = {

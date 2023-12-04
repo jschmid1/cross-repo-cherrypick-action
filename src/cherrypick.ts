@@ -1,7 +1,11 @@
 import * as core from "@actions/core";
 import dedent from "dedent";
 
-import { CreatePullRequestResponse, PullRequest } from "./github";
+import {
+  CreatePullRequestResponse,
+  PullRequest,
+  MergeStrategy,
+} from "./github";
 import { GithubApi } from "./github";
 import { Git, GitRefNotFoundError } from "./git";
 import * as utils from "./utils";
@@ -60,16 +64,16 @@ export class CherryPick {
       // define the upstream name for git remote
       const upstream_name = "upstream";
 
-      // if (!(await this.github.isMerged(mainpr))) {
-      //   const message = "Only merged pull requests can be cherry-picked.";
-      //   this.github.createComment({
-      //     owner,
-      //     repo,
-      //     issue_number: pull_number,
-      //     body: message,
-      //   });
-      //   return;
-      // }
+      if (!(await this.github.isMerged(mainpr))) {
+        const message = "Only merged pull requests can be cherry-picked.";
+        this.github.createComment({
+          owner,
+          repo,
+          issue_number: pull_number,
+          body: message,
+        });
+        return;
+      }
 
       // check if the pull request has the trigger label
       if (
@@ -102,7 +106,56 @@ export class CherryPick {
       );
 
       const commitShas = await this.github.getCommits(mainpr);
-      console.log(`Found commits: ${commitShas}`);
+
+      let commitShasToCherryPick;
+
+      const merge_commit_sha = await this.github.getMergeCommitSha(mainpr);
+
+      // switch case to check if it is a squash, rebase, or merge commit
+      switch (await this.github.mergeStrategy(mainpr, merge_commit_sha)) {
+        case MergeStrategy.SQUASHED:
+          // If merged via a squash merge_commit_sha represents the SHA of the squashed commit on
+          // the base branch. We must fetch it and its parent in case of a shallowly cloned repo
+          // To store the fetched commits indefinitely we save them to a remote ref using the sha
+          await this.git.fetch(
+            `+${merge_commit_sha}:refs/remotes/origin/${merge_commit_sha}`,
+            this.config.pwd,
+            2, // +1 in case this concerns a shallowly cloned repo
+          );
+          commitShasToCherryPick = [merge_commit_sha!];
+          break;
+        case MergeStrategy.REBASED:
+          // If rebased merge_commit_sha represents the commit that the base branch was updated to
+          // We must fetch it, its parents, and one extra parent in case of a shallowly cloned repo
+          // To store the fetched commits indefinitely we save them to a remote ref using the sha
+          await this.git.fetch(
+            `+${merge_commit_sha}:refs/remotes/origin/${merge_commit_sha}`,
+            this.config.pwd,
+            mainpr.commits + 1, // +1 in case this concerns a shallowly cloned repo
+          );
+          const range = `${merge_commit_sha}~${mainpr.commits}..${merge_commit_sha}`;
+          commitShasToCherryPick = await this.git.findCommitsInRange(
+            range,
+            this.config.pwd,
+          );
+          break;
+        case MergeStrategy.MERGECOMMIT:
+          commitShasToCherryPick = commitShas;
+          break;
+        case MergeStrategy.UNKNOWN:
+          console.log(
+            "Could not detect merge strategy. Using commits from the Pull Request.",
+          );
+          commitShasToCherryPick = commitShas;
+          break;
+        default:
+          console.log(
+            "Could not detect merge strategy. Using commits from the Pull Request.",
+          );
+          commitShasToCherryPick = commitShas;
+          break;
+      }
+      console.log(`Found commits to backport: ${commitShasToCherryPick}`);
 
       console.log("Checking the merged pull request for merge commits");
       const mergeCommitShas = await this.git.findMergeCommits(
@@ -126,21 +179,6 @@ export class CherryPick {
           body: message,
         });
         return;
-      }
-
-      let commitShasToCherryPick: string[];
-
-      // find out if "squashed and merged" or "rebased and merged"
-      if ((await this.github.isSquashed(mainpr)) || mainpr.commits == 1) {
-        console.log("PR was squashed and merged");
-        // if squashed, then use the merge_commit_sha
-        commitShasToCherryPick = [
-          await this.github.getMergeCommitSha(mainpr),
-        ]?.filter(Boolean) as string[];
-      } else {
-        // if rebased, then use all the commits from the original PR
-        console.log("PR was rebased and merged");
-        commitShasToCherryPick = commitShas;
       }
 
       if (
