@@ -139,6 +139,7 @@ Placeholder | Replaced with
 `pull_author` | The username of the original pull request's author, e.g. `jschmid1`
 `pull_number` | The number of the original pull request that is cherry-picked, e.g. `123`
 `pull_title` | The title of the original pull request that is cherry-picked, e.g. `fix: some error`
+`pull_description`| The description (i.e. body) of the original pull request that is backported, e.g. `Summary: This patch was created to..`
 
 ## Outputs
 
