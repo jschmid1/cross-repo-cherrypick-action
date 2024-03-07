@@ -221,6 +221,9 @@ export class CherryPick {
             body: error.message,
           });
         } else {
+          core.setFailed(
+            "An unexpected error occured. Please check the logs for details",
+          );
           throw error;
         }
       }
@@ -240,6 +243,9 @@ export class CherryPick {
             body: message,
           });
         } else {
+          core.setFailed(
+            "An unexpected error occured. Please check the logs for details",
+          );
           throw error;
         }
       }
@@ -273,6 +279,7 @@ export class CherryPick {
             issue_number: pull_number,
             body: message,
           });
+          this.createOutput(successByTarget);
           return;
         }
 
@@ -296,6 +303,7 @@ export class CherryPick {
             issue_number: pull_number,
             body: message,
           });
+          this.createOutput(successByTarget);
           return;
         }
 
@@ -319,6 +327,7 @@ export class CherryPick {
             issue_number: pull_number,
             body: message,
           });
+          this.createOutput(successByTarget);
           return;
         }
 
@@ -353,17 +362,30 @@ export class CherryPick {
             issue_number: pull_number,
             body: message,
           });
+          this.createOutput(successByTarget);
+          return;
         }
         const new_pr = new_pr_response.data;
 
-        const reviewer = mainpr.merged_by ? mainpr.merged_by.login : null;
-        if (reviewer) {
-          console.info("Setting reviewer " + reviewer);
+        // get the merger of the main pr
+        const merger = mainpr.merged_by ? mainpr.merged_by.login : null;
+
+        // also copy the assigned reviewers over
+        const requested_reviewers = mainpr.requested_reviewers?.map(
+          (reviewer) => reviewer.login,
+        );
+        // merge reviewer and requested_reviewers
+        const reviewers = [merger, ...(requested_reviewers || [])].filter(
+          (reviewer): reviewer is string => typeof reviewer === "string",
+        );
+
+        if (reviewers) {
+          console.info("Setting reviewers for the new PR");
           const reviewRequest = {
             owner: upstream_owner,
             repo: upstream_repo,
             pull_number: new_pr.number,
-            reviewers: [reviewer],
+            reviewers: reviewers || [],
           };
           const set_reviewers_response =
             await this.github.requestReviewers(reviewRequest);
@@ -394,7 +416,12 @@ export class CherryPick {
             issue_number: pull_number,
             body: error.message,
           });
+          this.createOutput(successByTarget);
+          return;
         } else {
+          core.setFailed(
+            "An unexpected error occured. Please check the logs for details",
+          );
           throw error;
         }
       }
