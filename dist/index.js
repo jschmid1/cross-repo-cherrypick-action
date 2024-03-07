@@ -60,7 +60,7 @@ class CherryPick {
         this.git = git;
     }
     run() {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e;
         return __awaiter(this, void 0, void 0, function* () {
             try {
                 const payload = this.github.getPayload();
@@ -177,6 +177,7 @@ class CherryPick {
                         });
                     }
                     else {
+                        core.setFailed("An unexpected error occured. Please check the logs for details");
                         throw error;
                     }
                 }
@@ -197,6 +198,7 @@ class CherryPick {
                         });
                     }
                     else {
+                        core.setFailed("An unexpected error occured. Please check the logs for details");
                         throw error;
                     }
                 }
@@ -216,6 +218,7 @@ class CherryPick {
                             issue_number: pull_number,
                             body: message,
                         });
+                        this.createOutput(successByTarget);
                         return;
                     }
                     try {
@@ -231,6 +234,7 @@ class CherryPick {
                             issue_number: pull_number,
                             body: message,
                         });
+                        this.createOutput(successByTarget);
                         return;
                     }
                     console.info(`Push branch ${branchname} to remote ${upstream_name}`);
@@ -245,6 +249,7 @@ class CherryPick {
                             issue_number: pull_number,
                             body: message,
                         });
+                        this.createOutput(successByTarget);
                         return;
                     }
                     const [upstream_owner, upstream_repo] = this.extractOwnerRepoFromUpstreamRepo(this.config.upstream_repo);
@@ -269,16 +274,23 @@ class CherryPick {
                             issue_number: pull_number,
                             body: message,
                         });
+                        this.createOutput(successByTarget);
+                        return;
                     }
                     const new_pr = new_pr_response.data;
-                    const reviewer = mainpr.merged_by ? mainpr.merged_by.login : null;
-                    if (reviewer) {
-                        console.info("Setting reviewer " + reviewer);
+                    // get the merger of the main pr
+                    const merger = mainpr.merged_by ? mainpr.merged_by.login : null;
+                    // also copy the assigned reviewers over
+                    const requested_reviewers = (_e = mainpr.requested_reviewers) === null || _e === void 0 ? void 0 : _e.map((reviewer) => reviewer.login);
+                    // merge reviewer and requested_reviewers
+                    const reviewers = [merger, ...(requested_reviewers || [])].filter((reviewer) => typeof reviewer === "string");
+                    if (reviewers) {
+                        console.info("Setting reviewers for the new PR");
                         const reviewRequest = {
                             owner: upstream_owner,
                             repo: upstream_repo,
                             pull_number: new_pr.number,
-                            reviewers: [reviewer],
+                            reviewers: reviewers || [],
                         };
                         const set_reviewers_response = yield this.github.requestReviewers(reviewRequest);
                         if (set_reviewers_response.status != 201) {
@@ -304,8 +316,11 @@ class CherryPick {
                             issue_number: pull_number,
                             body: error.message,
                         });
+                        this.createOutput(successByTarget);
+                        return;
                     }
                     else {
+                        core.setFailed("An unexpected error occured. Please check the logs for details");
                         throw error;
                     }
                 }
