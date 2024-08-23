@@ -871,7 +871,7 @@ const core = __importStar(__nccwpck_require__(2186));
 const cherrypick_1 = __nccwpck_require__(7179);
 const github_1 = __nccwpck_require__(5928);
 const git_1 = __nccwpck_require__(3374);
-const execa_1 = __nccwpck_require__(5950);
+const execa_1 = __nccwpck_require__(5277);
 /**
  * Called from the action.yml.
  *
@@ -31825,7 +31825,7 @@ module.exports["default"] = exports.default;
 
 /***/ }),
 
-/***/ 5950:
+/***/ 5277:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 "use strict";
@@ -32137,146 +32137,258 @@ const getSubprocessResult = ({stdout}) => {
 	throw new TypeError(`Unexpected "${typeof stdout}" stdout in template expression`);
 };
 
-;// CONCATENATED MODULE: external "node:tty"
-const external_node_tty_namespaceObject = require("node:tty");
-;// CONCATENATED MODULE: ./node_modules/yoctocolors/index.js
-
-
-// eslint-disable-next-line no-warning-comments
-// TODO: Use a better method when it's added to Node.js (https://github.com/nodejs/node/pull/40240)
-const hasColors = external_node_tty_namespaceObject.WriteStream.prototype.hasColors();
-
-const format = (open, close) => {
-	if (!hasColors) {
-		return input => input;
-	}
-
-	const openCode = `\u001B[${open}m`;
-	const closeCode = `\u001B[${close}m`;
-
-	return input => {
-		const string = input + ''; // eslint-disable-line no-implicit-coercion -- This is faster.
-		let index = string.indexOf(closeCode);
-
-		if (index === -1) {
-			// Note: Intentionally not using string interpolation for performance reasons.
-			return openCode + string + closeCode;
-		}
-
-		// Handle nested colors.
-
-		// We could have done this, but it's too slow (as of Node.js 22).
-		// return openCode + string.replaceAll(closeCode, openCode) + closeCode;
-
-		let result = openCode;
-		let lastIndex = 0;
-
-		while (index !== -1) {
-			result += string.slice(lastIndex, index) + openCode;
-			lastIndex = index + closeCode.length;
-			index = string.indexOf(closeCode, lastIndex);
-		}
-
-		result += string.slice(lastIndex) + closeCode;
-
-		return result;
-	};
-};
-
-const yoctocolors_reset = format(0, 0);
-const bold = format(1, 22);
-const dim = format(2, 22);
-const italic = format(3, 23);
-const underline = format(4, 24);
-const overline = format(53, 55);
-const inverse = format(7, 27);
-const yoctocolors_hidden = format(8, 28);
-const strikethrough = format(9, 29);
-
-const black = format(30, 39);
-const red = format(31, 39);
-const green = format(32, 39);
-const yellow = format(33, 39);
-const blue = format(34, 39);
-const magenta = format(35, 39);
-const cyan = format(36, 39);
-const white = format(37, 39);
-const gray = format(90, 39);
-
-const bgBlack = format(40, 49);
-const bgRed = format(41, 49);
-const bgGreen = format(42, 49);
-const bgYellow = format(43, 49);
-const bgBlue = format(44, 49);
-const bgMagenta = format(45, 49);
-const bgCyan = format(46, 49);
-const bgWhite = format(47, 49);
-const bgGray = format(100, 49);
-
-const redBright = format(91, 39);
-const greenBright = format(92, 39);
-const yellowBright = format(93, 39);
-const blueBright = format(94, 39);
-const magentaBright = format(95, 39);
-const cyanBright = format(96, 39);
-const whiteBright = format(97, 39);
-
-const bgRedBright = format(101, 49);
-const bgGreenBright = format(102, 49);
-const bgYellowBright = format(103, 49);
-const bgBlueBright = format(104, 49);
-const bgMagentaBright = format(105, 49);
-const bgCyanBright = format(106, 49);
-const bgWhiteBright = format(107, 49);
-
 // EXTERNAL MODULE: external "node:util"
 var external_node_util_ = __nccwpck_require__(7261);
-;// CONCATENATED MODULE: ./node_modules/execa/lib/verbose/info.js
+;// CONCATENATED MODULE: external "node:process"
+const external_node_process_namespaceObject = require("node:process");
+;// CONCATENATED MODULE: ./node_modules/execa/lib/utils/standard-stream.js
 
+
+const isStandardStream = stream => STANDARD_STREAMS.includes(stream);
+const STANDARD_STREAMS = [external_node_process_namespaceObject.stdin, external_node_process_namespaceObject.stdout, external_node_process_namespaceObject.stderr];
+const STANDARD_STREAMS_ALIASES = ['stdin', 'stdout', 'stderr'];
+const getStreamName = fdNumber => STANDARD_STREAMS_ALIASES[fdNumber] ?? `stdio[${fdNumber}]`;
+
+;// CONCATENATED MODULE: ./node_modules/execa/lib/arguments/specific.js
+
+
+
+
+// Some options can have different values for `stdout`/`stderr`/`fd3`.
+// This normalizes those to array of values.
+// For example, `{verbose: {stdout: 'none', stderr: 'full'}}` becomes `{verbose: ['none', 'none', 'full']}`
+const normalizeFdSpecificOptions = options => {
+	const optionsCopy = {...options};
+
+	for (const optionName of FD_SPECIFIC_OPTIONS) {
+		optionsCopy[optionName] = normalizeFdSpecificOption(options, optionName);
+	}
+
+	return optionsCopy;
+};
+
+const normalizeFdSpecificOption = (options, optionName) => {
+	const optionBaseArray = Array.from({length: getStdioLength(options) + 1});
+	const optionArray = normalizeFdSpecificValue(options[optionName], optionBaseArray, optionName);
+	return addDefaultValue(optionArray, optionName);
+};
+
+const getStdioLength = ({stdio}) => Array.isArray(stdio)
+	? Math.max(stdio.length, STANDARD_STREAMS_ALIASES.length)
+	: STANDARD_STREAMS_ALIASES.length;
+
+const normalizeFdSpecificValue = (optionValue, optionArray, optionName) => isPlainObject(optionValue)
+	? normalizeOptionObject(optionValue, optionArray, optionName)
+	: optionArray.fill(optionValue);
+
+const normalizeOptionObject = (optionValue, optionArray, optionName) => {
+	for (const fdName of Object.keys(optionValue).sort(compareFdName)) {
+		for (const fdNumber of parseFdName(fdName, optionName, optionArray)) {
+			optionArray[fdNumber] = optionValue[fdName];
+		}
+	}
+
+	return optionArray;
+};
+
+// Ensure priority order when setting both `stdout`/`stderr`, `fd1`/`fd2`, and `all`
+const compareFdName = (fdNameA, fdNameB) => getFdNameOrder(fdNameA) < getFdNameOrder(fdNameB) ? 1 : -1;
+
+const getFdNameOrder = fdName => {
+	if (fdName === 'stdout' || fdName === 'stderr') {
+		return 0;
+	}
+
+	return fdName === 'all' ? 2 : 1;
+};
+
+const parseFdName = (fdName, optionName, optionArray) => {
+	if (fdName === 'ipc') {
+		return [optionArray.length - 1];
+	}
+
+	const fdNumber = parseFd(fdName);
+	if (fdNumber === undefined || fdNumber === 0) {
+		throw new TypeError(`"${optionName}.${fdName}" is invalid.
+It must be "${optionName}.stdout", "${optionName}.stderr", "${optionName}.all", "${optionName}.ipc", or "${optionName}.fd3", "${optionName}.fd4" (and so on).`);
+	}
+
+	if (fdNumber >= optionArray.length) {
+		throw new TypeError(`"${optionName}.${fdName}" is invalid: that file descriptor does not exist.
+Please set the "stdio" option to ensure that file descriptor exists.`);
+	}
+
+	return fdNumber === 'all' ? [1, 2] : [fdNumber];
+};
+
+// Use the same syntax for fd-specific options and the `from`/`to` options
+const parseFd = fdName => {
+	if (fdName === 'all') {
+		return fdName;
+	}
+
+	if (STANDARD_STREAMS_ALIASES.includes(fdName)) {
+		return STANDARD_STREAMS_ALIASES.indexOf(fdName);
+	}
+
+	const regexpResult = FD_REGEXP.exec(fdName);
+	if (regexpResult !== null) {
+		return Number(regexpResult[1]);
+	}
+};
+
+const FD_REGEXP = /^fd(\d+)$/;
+
+const addDefaultValue = (optionArray, optionName) => optionArray.map(optionValue => optionValue === undefined
+	? DEFAULT_OPTIONS[optionName]
+	: optionValue);
 
 // Default value for the `verbose` option
 const verboseDefault = (0,external_node_util_.debuglog)('execa').enabled ? 'full' : 'none';
 
-// Information computed before spawning, used by the `verbose` option
-const getVerboseInfo = verbose => {
-	const verboseId = isVerbose(verbose) ? VERBOSE_ID++ : undefined;
-	validateVerbose(verbose);
-	return {verbose, verboseId};
+const DEFAULT_OPTIONS = {
+	lines: false,
+	buffer: true,
+	maxBuffer: 1000 * 1000 * 100,
+	verbose: verboseDefault,
+	stripFinalNewline: true,
 };
 
-// Prepending the `pid` is useful when multiple commands print their output at the same time.
-// However, we cannot use the real PID since this is not available with `child_process.spawnSync()`.
-// Also, we cannot use the real PID if we want to print it before `child_process.spawn()` is run.
-// As a pro, it is shorter than a normal PID and never re-uses the same id.
-// As a con, it cannot be used to send signals.
-let VERBOSE_ID = 0n;
+// List of options which can have different values for `stdout`/`stderr`
+const FD_SPECIFIC_OPTIONS = ['lines', 'buffer', 'maxBuffer', 'verbose', 'stripFinalNewline'];
+
+// Retrieve fd-specific option
+const getFdSpecificValue = (optionArray, fdNumber) => fdNumber === 'ipc'
+	? optionArray.at(-1)
+	: optionArray[fdNumber];
+
+;// CONCATENATED MODULE: ./node_modules/execa/lib/verbose/values.js
+
 
 // The `verbose` option can have different values for `stdout`/`stderr`
-const isVerbose = verbose => verbose.some(fdVerbose => fdVerbose !== 'none');
+const isVerbose = ({verbose}, fdNumber) => getFdVerbose(verbose, fdNumber) !== 'none';
 
-const validateVerbose = verbose => {
-	for (const verboseItem of verbose) {
-		if (verboseItem === false) {
-			throw new TypeError('The "verbose: false" option was renamed to "verbose: \'none\'".');
-		}
+// Whether IPC and output and logged
+const isFullVerbose = ({verbose}, fdNumber) => !['none', 'short'].includes(getFdVerbose(verbose, fdNumber));
 
-		if (verboseItem === true) {
-			throw new TypeError('The "verbose: true" option was renamed to "verbose: \'short\'".');
-		}
-
-		if (!VERBOSE_VALUES.has(verboseItem)) {
-			const allowedValues = [...VERBOSE_VALUES].map(allowedValue => `'${allowedValue}'`).join(', ');
-			throw new TypeError(`The "verbose" option must not be ${verboseItem}. Allowed values are: ${allowedValues}.`);
-		}
-	}
+// The `verbose` option can be a function to customize logging
+const getVerboseFunction = ({verbose}, fdNumber) => {
+	const fdVerbose = getFdVerbose(verbose, fdNumber);
+	return isVerboseFunction(fdVerbose) ? fdVerbose : undefined;
 };
 
-const VERBOSE_VALUES = new Set(['none', 'short', 'full']);
+// When using `verbose: {stdout, stderr, fd3, ipc}`:
+//  - `verbose.stdout|stderr|fd3` is used for 'output'
+//  - `verbose.ipc` is only used for 'ipc'
+//  - highest `verbose.*` value is used for 'command', 'error' and 'duration'
+const getFdVerbose = (verbose, fdNumber) => fdNumber === undefined
+	? getFdGenericVerbose(verbose)
+	: getFdSpecificValue(verbose, fdNumber);
+
+// When using `verbose: {stdout, stderr, fd3, ipc}` and logging is not specific to a file descriptor.
+// We then use the highest `verbose.*` value, using the following order:
+//  - function > 'full' > 'short' > 'none'
+//  - if several functions are defined: stdout > stderr > fd3 > ipc
+const getFdGenericVerbose = verbose => verbose.find(fdVerbose => isVerboseFunction(fdVerbose))
+	?? VERBOSE_VALUES.findLast(fdVerbose => verbose.includes(fdVerbose));
+
+// Whether the `verbose` option is customized using a function
+const isVerboseFunction = fdVerbose => typeof fdVerbose === 'function';
+
+const VERBOSE_VALUES = ['none', 'short', 'full'];
 
 ;// CONCATENATED MODULE: external "node:fs"
 const external_node_fs_namespaceObject = require("node:fs");
-;// CONCATENATED MODULE: external "node:process"
-const external_node_process_namespaceObject = require("node:process");
+;// CONCATENATED MODULE: ./node_modules/execa/lib/arguments/escape.js
+
+
+
+// Compute `result.command` and `result.escapedCommand`
+const joinCommand = (filePath, rawArguments) => {
+	const fileAndArguments = [filePath, ...rawArguments];
+	const command = fileAndArguments.join(' ');
+	const escapedCommand = fileAndArguments
+		.map(fileAndArgument => quoteString(escapeControlCharacters(fileAndArgument)))
+		.join(' ');
+	return {command, escapedCommand};
+};
+
+// Remove ANSI sequences and escape control characters and newlines
+const escapeLines = lines => (0,external_node_util_.stripVTControlCharacters)(lines)
+	.split('\n')
+	.map(line => escapeControlCharacters(line))
+	.join('\n');
+
+const escapeControlCharacters = line => line.replaceAll(SPECIAL_CHAR_REGEXP, character => escapeControlCharacter(character));
+
+const escapeControlCharacter = character => {
+	const commonEscape = COMMON_ESCAPES[character];
+	if (commonEscape !== undefined) {
+		return commonEscape;
+	}
+
+	const codepoint = character.codePointAt(0);
+	const codepointHex = codepoint.toString(16);
+	return codepoint <= ASTRAL_START
+		? `\\u${codepointHex.padStart(4, '0')}`
+		: `\\U${codepointHex}`;
+};
+
+// Characters that would create issues when printed are escaped using the \u or \U notation.
+// Those include control characters and newlines.
+// The \u and \U notation is Bash specific, but there is no way to do this in a shell-agnostic way.
+// Some shells do not even have a way to print those characters in an escaped fashion.
+// Therefore, we prioritize printing those safely, instead of allowing those to be copy-pasted.
+// List of Unicode character categories: https://www.fileformat.info/info/unicode/category/index.htm
+const getSpecialCharRegExp = () => {
+	try {
+		// This throws when using Node.js without ICU support.
+		// When using a RegExp literal, this would throw at parsing-time, instead of runtime.
+		// eslint-disable-next-line prefer-regex-literals
+		return new RegExp('\\p{Separator}|\\p{Other}', 'gu');
+	} catch {
+		// Similar to the above RegExp, but works even when Node.js has been built without ICU support.
+		// Unlike the above RegExp, it only covers whitespaces and C0/C1 control characters.
+		// It does not cover some edge cases, such as Unicode reserved characters.
+		// See https://github.com/sindresorhus/execa/issues/1143
+		// eslint-disable-next-line no-control-regex
+		return /[\s\u0000-\u001F\u007F-\u009F\u00AD]/g;
+	}
+};
+
+const SPECIAL_CHAR_REGEXP = getSpecialCharRegExp();
+
+// Accepted by $'...' in Bash.
+// Exclude \a \e \v which are accepted in Bash but not in JavaScript (except \v) and JSON.
+const COMMON_ESCAPES = {
+	' ': ' ',
+	'\b': '\\b',
+	'\f': '\\f',
+	'\n': '\\n',
+	'\r': '\\r',
+	'\t': '\\t',
+};
+
+// Up until that codepoint, \u notation can be used instead of \U
+const ASTRAL_START = 65_535;
+
+// Some characters are shell-specific, i.e. need to be escaped when the command is copy-pasted then run.
+// Escaping is shell-specific. We cannot know which shell is used: `process.platform` detection is not enough.
+// For example, Windows users could be using `cmd.exe`, Powershell or Bash for Windows which all use different escaping.
+// We use '...' on Unix, which is POSIX shell compliant and escape all characters but ' so this is fairly safe.
+// On Windows, we assume cmd.exe is used and escape with "...", which also works with Powershell.
+const quoteString = escapedArgument => {
+	if (NO_ESCAPE_REGEXP.test(escapedArgument)) {
+		return escapedArgument;
+	}
+
+	return external_node_process_namespaceObject.platform === 'win32'
+		? `"${escapedArgument.replaceAll('"', '""')}"`
+		: `'${escapedArgument.replaceAll('\'', '\'\\\'\'')}'`;
+};
+
+const NO_ESCAPE_REGEXP = /^[\w./-]+$/;
+
 ;// CONCATENATED MODULE: ./node_modules/is-unicode-supported/index.js
 
 
@@ -32589,79 +32701,176 @@ const replaceSymbols = (string, {useFallback = !shouldUseMain} = {}) => {
 	return string;
 };
 
-;// CONCATENATED MODULE: ./node_modules/execa/lib/arguments/escape.js
+;// CONCATENATED MODULE: external "node:tty"
+const external_node_tty_namespaceObject = require("node:tty");
+;// CONCATENATED MODULE: ./node_modules/yoctocolors/index.js
 
 
+// eslint-disable-next-line no-warning-comments
+// TODO: Use a better method when it's added to Node.js (https://github.com/nodejs/node/pull/40240)
+const hasColors = external_node_tty_namespaceObject.WriteStream.prototype.hasColors();
 
-// Compute `result.command` and `result.escapedCommand`
-const joinCommand = (filePath, rawArguments) => {
-	const fileAndArguments = [filePath, ...rawArguments];
-	const command = fileAndArguments.join(' ');
-	const escapedCommand = fileAndArguments
-		.map(fileAndArgument => quoteString(escapeControlCharacters(fileAndArgument)))
-		.join(' ');
-	return {command, escapedCommand};
-};
-
-// Remove ANSI sequences and escape control characters and newlines
-const escapeLines = lines => (0,external_node_util_.stripVTControlCharacters)(lines)
-	.split('\n')
-	.map(line => escapeControlCharacters(line))
-	.join('\n');
-
-const escapeControlCharacters = line => line.replaceAll(SPECIAL_CHAR_REGEXP, character => escapeControlCharacter(character));
-
-const escapeControlCharacter = character => {
-	const commonEscape = COMMON_ESCAPES[character];
-	if (commonEscape !== undefined) {
-		return commonEscape;
+const format = (open, close) => {
+	if (!hasColors) {
+		return input => input;
 	}
 
-	const codepoint = character.codePointAt(0);
-	const codepointHex = codepoint.toString(16);
-	return codepoint <= ASTRAL_START
-		? `\\u${codepointHex.padStart(4, '0')}`
-		: `\\U${codepointHex}`;
+	const openCode = `\u001B[${open}m`;
+	const closeCode = `\u001B[${close}m`;
+
+	return input => {
+		const string = input + ''; // eslint-disable-line no-implicit-coercion -- This is faster.
+		let index = string.indexOf(closeCode);
+
+		if (index === -1) {
+			// Note: Intentionally not using string interpolation for performance reasons.
+			return openCode + string + closeCode;
+		}
+
+		// Handle nested colors.
+
+		// We could have done this, but it's too slow (as of Node.js 22).
+		// return openCode + string.replaceAll(closeCode, openCode) + closeCode;
+
+		let result = openCode;
+		let lastIndex = 0;
+
+		while (index !== -1) {
+			result += string.slice(lastIndex, index) + openCode;
+			lastIndex = index + closeCode.length;
+			index = string.indexOf(closeCode, lastIndex);
+		}
+
+		result += string.slice(lastIndex) + closeCode;
+
+		return result;
+	};
 };
 
-// Characters that would create issues when printed are escaped using the \u or \U notation.
-// Those include control characters and newlines.
-// The \u and \U notation is Bash specific, but there is no way to do this in a shell-agnostic way.
-// Some shells do not even have a way to print those characters in an escaped fashion.
-// Therefore, we prioritize printing those safely, instead of allowing those to be copy-pasted.
-// List of Unicode character categories: https://www.fileformat.info/info/unicode/category/index.htm
-const SPECIAL_CHAR_REGEXP = /\p{Separator}|\p{Other}/gu;
+const yoctocolors_reset = format(0, 0);
+const bold = format(1, 22);
+const dim = format(2, 22);
+const italic = format(3, 23);
+const underline = format(4, 24);
+const overline = format(53, 55);
+const inverse = format(7, 27);
+const yoctocolors_hidden = format(8, 28);
+const strikethrough = format(9, 29);
 
-// Accepted by $'...' in Bash.
-// Exclude \a \e \v which are accepted in Bash but not in JavaScript (except \v) and JSON.
-const COMMON_ESCAPES = {
-	' ': ' ',
-	'\b': '\\b',
-	'\f': '\\f',
-	'\n': '\\n',
-	'\r': '\\r',
-	'\t': '\\t',
+const black = format(30, 39);
+const red = format(31, 39);
+const green = format(32, 39);
+const yellow = format(33, 39);
+const blue = format(34, 39);
+const magenta = format(35, 39);
+const cyan = format(36, 39);
+const white = format(37, 39);
+const gray = format(90, 39);
+
+const bgBlack = format(40, 49);
+const bgRed = format(41, 49);
+const bgGreen = format(42, 49);
+const bgYellow = format(43, 49);
+const bgBlue = format(44, 49);
+const bgMagenta = format(45, 49);
+const bgCyan = format(46, 49);
+const bgWhite = format(47, 49);
+const bgGray = format(100, 49);
+
+const redBright = format(91, 39);
+const greenBright = format(92, 39);
+const yellowBright = format(93, 39);
+const blueBright = format(94, 39);
+const magentaBright = format(95, 39);
+const cyanBright = format(96, 39);
+const whiteBright = format(97, 39);
+
+const bgRedBright = format(101, 49);
+const bgGreenBright = format(102, 49);
+const bgYellowBright = format(103, 49);
+const bgBlueBright = format(104, 49);
+const bgMagentaBright = format(105, 49);
+const bgCyanBright = format(106, 49);
+const bgWhiteBright = format(107, 49);
+
+;// CONCATENATED MODULE: ./node_modules/execa/lib/verbose/default.js
+
+
+
+// Default when `verbose` is not a function
+const defaultVerboseFunction = ({
+	type,
+	message,
+	timestamp,
+	piped,
+	commandId,
+	result: {failed = false} = {},
+	options: {reject = true},
+}) => {
+	const timestampString = serializeTimestamp(timestamp);
+	const icon = ICONS[type]({failed, reject, piped});
+	const color = COLORS[type]({reject});
+	return `${gray(`[${timestampString}]`)} ${gray(`[${commandId}]`)} ${color(icon)} ${color(message)}`;
 };
 
-// Up until that codepoint, \u notation can be used instead of \U
-const ASTRAL_START = 65_535;
+// Prepending the timestamp allows debugging the slow paths of a subprocess
+const serializeTimestamp = timestamp => `${padField(timestamp.getHours(), 2)}:${padField(timestamp.getMinutes(), 2)}:${padField(timestamp.getSeconds(), 2)}.${padField(timestamp.getMilliseconds(), 3)}`;
 
-// Some characters are shell-specific, i.e. need to be escaped when the command is copy-pasted then run.
-// Escaping is shell-specific. We cannot know which shell is used: `process.platform` detection is not enough.
-// For example, Windows users could be using `cmd.exe`, Powershell or Bash for Windows which all use different escaping.
-// We use '...' on Unix, which is POSIX shell compliant and escape all characters but ' so this is fairly safe.
-// On Windows, we assume cmd.exe is used and escape with "...", which also works with Powershell.
-const quoteString = escapedArgument => {
-	if (NO_ESCAPE_REGEXP.test(escapedArgument)) {
-		return escapedArgument;
+const padField = (field, padding) => String(field).padStart(padding, '0');
+
+const getFinalIcon = ({failed, reject}) => {
+	if (!failed) {
+		return node_modules_figures.tick;
 	}
 
-	return external_node_process_namespaceObject.platform === 'win32'
-		? `"${escapedArgument.replaceAll('"', '""')}"`
-		: `'${escapedArgument.replaceAll('\'', '\'\\\'\'')}'`;
+	return reject ? node_modules_figures.cross : node_modules_figures.warning;
 };
 
-const NO_ESCAPE_REGEXP = /^[\w./-]+$/;
+const ICONS = {
+	command: ({piped}) => piped ? '|' : '$',
+	output: () => ' ',
+	ipc: () => '*',
+	error: getFinalIcon,
+	duration: getFinalIcon,
+};
+
+const identity = string => string;
+
+const COLORS = {
+	command: () => bold,
+	output: () => identity,
+	ipc: () => identity,
+	error: ({reject}) => reject ? redBright : yellowBright,
+	duration: () => gray,
+};
+
+;// CONCATENATED MODULE: ./node_modules/execa/lib/verbose/custom.js
+
+
+// Apply the `verbose` function on each line
+const applyVerboseOnLines = (printedLines, verboseInfo, fdNumber) => {
+	const verboseFunction = getVerboseFunction(verboseInfo, fdNumber);
+	return printedLines
+		.map(({verboseLine, verboseObject}) => applyVerboseFunction(verboseLine, verboseObject, verboseFunction))
+		.filter(printedLine => printedLine !== undefined)
+		.map(printedLine => appendNewline(printedLine))
+		.join('');
+};
+
+const applyVerboseFunction = (verboseLine, verboseObject, verboseFunction) => {
+	if (verboseFunction === undefined) {
+		return verboseLine;
+	}
+
+	const printedLine = verboseFunction(verboseLine, verboseObject);
+	if (typeof printedLine === 'string') {
+		return printedLine;
+	}
+};
+
+const appendNewline = printedLine => printedLine.endsWith('\n')
+	? printedLine
+	: `${printedLine}\n`;
 
 ;// CONCATENATED MODULE: ./node_modules/execa/lib/verbose/log.js
 
@@ -32671,49 +32880,41 @@ const NO_ESCAPE_REGEXP = /^[\w./-]+$/;
 
 
 // Write synchronously to ensure lines are properly ordered and not interleaved with `stdout`
-const verboseLog = (string, verboseId, icon, color) => {
-	const prefixedLines = addPrefix(string, verboseId, icon, color);
-	(0,external_node_fs_namespaceObject.writeFileSync)(STDERR_FD, `${prefixedLines}\n`);
+const verboseLog = ({type, verboseMessage, fdNumber, verboseInfo, result}) => {
+	const verboseObject = getVerboseObject({type, result, verboseInfo});
+	const printedLines = getPrintedLines(verboseMessage, verboseObject);
+	const finalLines = applyVerboseOnLines(printedLines, verboseInfo, fdNumber);
+	(0,external_node_fs_namespaceObject.writeFileSync)(STDERR_FD, finalLines);
 };
 
+const getVerboseObject = ({
+	type,
+	result,
+	verboseInfo: {escapedCommand, commandId, rawOptions: {piped = false, ...options}},
+}) => ({
+	type,
+	escapedCommand,
+	commandId: `${commandId}`,
+	timestamp: new Date(),
+	piped,
+	result,
+	options,
+});
+
+const getPrintedLines = (verboseMessage, verboseObject) => verboseMessage
+	.split('\n')
+	.map(message => getPrintedLine({...verboseObject, message}));
+
+const getPrintedLine = verboseObject => {
+	const verboseLine = defaultVerboseFunction(verboseObject);
+	return {verboseLine, verboseObject};
+};
+
+// Unless a `verbose` function is used, print all logs on `stderr`
 const STDERR_FD = 2;
 
-const addPrefix = (string, verboseId, icon, color) => string.includes('\n')
-	? string
-		.split('\n')
-		.map(line => addPrefixToLine(line, verboseId, icon, color))
-		.join('\n')
-	: addPrefixToLine(string, verboseId, icon, color);
-
-const addPrefixToLine = (line, verboseId, icon, color = identity) => [
-	gray(`[${getTimestamp()}]`),
-	gray(`[${verboseId}]`),
-	color(ICONS[icon]),
-	color(line),
-].join(' ');
-
-const identity = string => string;
-
-// Prepending the timestamp allows debugging the slow paths of a subprocess
-const getTimestamp = () => {
-	const date = new Date();
-	return `${padField(date.getHours(), 2)}:${padField(date.getMinutes(), 2)}:${padField(date.getSeconds(), 2)}.${padField(date.getMilliseconds(), 3)}`;
-};
-
-const padField = (field, padding) => String(field).padStart(padding, '0');
-
-const ICONS = {
-	command: '$',
-	pipedCommand: '|',
-	output: ' ',
-	ipc: '*',
-	error: node_modules_figures.cross,
-	warning: node_modules_figures.warning,
-	success: node_modules_figures.tick,
-};
-
 // Serialize any type to a line string, for logging
-const serializeLogMessage = message => {
+const serializeVerboseMessage = message => {
 	const messageString = typeof message === 'string' ? message : (0,external_node_util_.inspect)(message);
 	const escapedMessage = escapeLines(messageString);
 	return escapedMessage.replaceAll('\t', ' '.repeat(TAB_SIZE));
@@ -32726,15 +32927,58 @@ const TAB_SIZE = 2;
 
 
 
-
-// When `verbose` is `short|full`, print each command
-const logCommand = (escapedCommand, {verbose, verboseId}, {piped = false}) => {
-	if (!isVerbose(verbose)) {
+// When `verbose` is `short|full|custom`, print each command
+const logCommand = (escapedCommand, verboseInfo) => {
+	if (!isVerbose(verboseInfo)) {
 		return;
 	}
 
-	const icon = piped ? 'pipedCommand' : 'command';
-	verboseLog(escapedCommand, verboseId, icon, bold);
+	verboseLog({
+		type: 'command',
+		verboseMessage: escapedCommand,
+		verboseInfo,
+	});
+};
+
+;// CONCATENATED MODULE: ./node_modules/execa/lib/verbose/info.js
+
+
+// Information computed before spawning, used by the `verbose` option
+const getVerboseInfo = (verbose, escapedCommand, rawOptions) => {
+	validateVerbose(verbose);
+	const commandId = getCommandId(verbose);
+	return {
+		verbose,
+		escapedCommand,
+		commandId,
+		rawOptions,
+	};
+};
+
+const getCommandId = verbose => isVerbose({verbose}) ? COMMAND_ID++ : undefined;
+
+// Prepending the `pid` is useful when multiple commands print their output at the same time.
+// However, we cannot use the real PID since this is not available with `child_process.spawnSync()`.
+// Also, we cannot use the real PID if we want to print it before `child_process.spawn()` is run.
+// As a pro, it is shorter than a normal PID and never re-uses the same id.
+// As a con, it cannot be used to send signals.
+let COMMAND_ID = 0n;
+
+const validateVerbose = verbose => {
+	for (const fdVerbose of verbose) {
+		if (fdVerbose === false) {
+			throw new TypeError('The "verbose: false" option was renamed to "verbose: \'none\'".');
+		}
+
+		if (fdVerbose === true) {
+			throw new TypeError('The "verbose: true" option was renamed to "verbose: \'short\'".');
+		}
+
+		if (!VERBOSE_VALUES.includes(fdVerbose) && !isVerboseFunction(fdVerbose)) {
+			const allowedValues = VERBOSE_VALUES.map(allowedValue => `'${allowedValue}'`).join(', ');
+			throw new TypeError(`The "verbose" option must not be ${fdVerbose}. Allowed values are: ${allowedValues} or a function.`);
+		}
+	}
 };
 
 ;// CONCATENATED MODULE: ./node_modules/execa/lib/return/duration.js
@@ -32747,119 +32991,6 @@ const getStartTime = () => external_node_process_namespaceObject.hrtime.bigint()
 // Printed by the `verbose` option.
 const getDurationMs = startTime => Number(external_node_process_namespaceObject.hrtime.bigint() - startTime) / 1e6;
 
-;// CONCATENATED MODULE: ./node_modules/execa/lib/utils/standard-stream.js
-
-
-const isStandardStream = stream => STANDARD_STREAMS.includes(stream);
-const STANDARD_STREAMS = [external_node_process_namespaceObject.stdin, external_node_process_namespaceObject.stdout, external_node_process_namespaceObject.stderr];
-const STANDARD_STREAMS_ALIASES = ['stdin', 'stdout', 'stderr'];
-const getStreamName = fdNumber => STANDARD_STREAMS_ALIASES[fdNumber] ?? `stdio[${fdNumber}]`;
-
-;// CONCATENATED MODULE: ./node_modules/execa/lib/arguments/specific.js
-
-
-
-
-// Some options can have different values for `stdout`/`stderr`/`fd3`.
-// This normalizes those to array of values.
-// For example, `{verbose: {stdout: 'none', stderr: 'full'}}` becomes `{verbose: ['none', 'none', 'full']}`
-const normalizeFdSpecificOptions = options => {
-	const optionsCopy = {...options};
-
-	for (const optionName of FD_SPECIFIC_OPTIONS) {
-		optionsCopy[optionName] = normalizeFdSpecificOption(options, optionName);
-	}
-
-	return optionsCopy;
-};
-
-const normalizeFdSpecificOption = (options, optionName) => {
-	const optionBaseArray = Array.from({length: getStdioLength(options) + 1});
-	const optionArray = normalizeFdSpecificValue(options[optionName], optionBaseArray, optionName);
-	return addDefaultValue(optionArray, optionName);
-};
-
-const getStdioLength = ({stdio}) => Array.isArray(stdio)
-	? Math.max(stdio.length, STANDARD_STREAMS_ALIASES.length)
-	: STANDARD_STREAMS_ALIASES.length;
-
-const normalizeFdSpecificValue = (optionValue, optionArray, optionName) => isPlainObject(optionValue)
-	? normalizeOptionObject(optionValue, optionArray, optionName)
-	: optionArray.fill(optionValue);
-
-const normalizeOptionObject = (optionValue, optionArray, optionName) => {
-	for (const fdName of Object.keys(optionValue).sort(compareFdName)) {
-		for (const fdNumber of parseFdName(fdName, optionName, optionArray)) {
-			optionArray[fdNumber] = optionValue[fdName];
-		}
-	}
-
-	return optionArray;
-};
-
-// Ensure priority order when setting both `stdout`/`stderr`, `fd1`/`fd2`, and `all`
-const compareFdName = (fdNameA, fdNameB) => getFdNameOrder(fdNameA) < getFdNameOrder(fdNameB) ? 1 : -1;
-
-const getFdNameOrder = fdName => {
-	if (fdName === 'stdout' || fdName === 'stderr') {
-		return 0;
-	}
-
-	return fdName === 'all' ? 2 : 1;
-};
-
-const parseFdName = (fdName, optionName, optionArray) => {
-	if (fdName === 'ipc') {
-		return [optionArray.length - 1];
-	}
-
-	const fdNumber = parseFd(fdName);
-	if (fdNumber === undefined || fdNumber === 0) {
-		throw new TypeError(`"${optionName}.${fdName}" is invalid.
-It must be "${optionName}.stdout", "${optionName}.stderr", "${optionName}.all", "${optionName}.ipc", or "${optionName}.fd3", "${optionName}.fd4" (and so on).`);
-	}
-
-	if (fdNumber >= optionArray.length) {
-		throw new TypeError(`"${optionName}.${fdName}" is invalid: that file descriptor does not exist.
-Please set the "stdio" option to ensure that file descriptor exists.`);
-	}
-
-	return fdNumber === 'all' ? [1, 2] : [fdNumber];
-};
-
-// Use the same syntax for fd-specific options and the `from`/`to` options
-const parseFd = fdName => {
-	if (fdName === 'all') {
-		return fdName;
-	}
-
-	if (STANDARD_STREAMS_ALIASES.includes(fdName)) {
-		return STANDARD_STREAMS_ALIASES.indexOf(fdName);
-	}
-
-	const regexpResult = FD_REGEXP.exec(fdName);
-	if (regexpResult !== null) {
-		return Number(regexpResult[1]);
-	}
-};
-
-const FD_REGEXP = /^fd(\d+)$/;
-
-const addDefaultValue = (optionArray, optionName) => optionArray.map(optionValue => optionValue === undefined
-	? DEFAULT_OPTIONS[optionName]
-	: optionValue);
-
-const DEFAULT_OPTIONS = {
-	lines: false,
-	buffer: true,
-	maxBuffer: 1000 * 1000 * 100,
-	verbose: verboseDefault,
-	stripFinalNewline: true,
-};
-
-// List of options which can have different values for `stdout`/`stderr`
-const FD_SPECIFIC_OPTIONS = ['lines', 'buffer', 'maxBuffer', 'verbose', 'stripFinalNewline'];
-
 ;// CONCATENATED MODULE: ./node_modules/execa/lib/arguments/command.js
 
 
@@ -32871,8 +33002,9 @@ const FD_SPECIFIC_OPTIONS = ['lines', 'buffer', 'maxBuffer', 'verbose', 'stripFi
 const handleCommand = (filePath, rawArguments, rawOptions) => {
 	const startTime = getStartTime();
 	const {command, escapedCommand} = joinCommand(filePath, rawArguments);
-	const verboseInfo = getVerboseInfo(normalizeFdSpecificOption(rawOptions, 'verbose'));
-	logCommand(escapedCommand, verboseInfo, rawOptions);
+	const verbose = normalizeFdSpecificOption(rawOptions, 'verbose');
+	const verboseInfo = getVerboseInfo(verbose, escapedCommand, {...rawOptions});
+	logCommand(escapedCommand, verboseInfo);
 	return {
 		command,
 		escapedCommand,
@@ -34150,6 +34282,7 @@ const RESPONSE_TYPE = 'execa:ipc:response';
 
 
 
+
 // When `sendMessage()` is ongoing, any `message` being received waits before being emitted.
 // This allows calling one or multiple `await sendMessage()` followed by `await getOneMessage()`/`await getEachMessage()`.
 // Without running into a race condition when the other process sends a response too fast, before the current process set up a listener.
@@ -34189,7 +34322,7 @@ const hasMessageListeners = (anyProcess, ipcEmitter) => ipcEmitter.listenerCount
 // When `buffer` is `false`, we set up a `message` listener that should be ignored.
 // That listener is only meant to intercept `strict` acknowledgement responses.
 const getMinListenerCount = anyProcess => SUBPROCESS_OPTIONS.has(anyProcess)
-	&& !SUBPROCESS_OPTIONS.get(anyProcess).options.buffer.at(-1)
+	&& !getFdSpecificValue(SUBPROCESS_OPTIONS.get(anyProcess).options.buffer, 'ipc')
 	? 1
 	: 0;
 
@@ -34481,7 +34614,7 @@ const handleNodeOption = (file, commandArguments, {
 	}
 
 	const normalizedNodePath = safeNormalizeFileUrl(nodePath, 'The "nodePath" option');
-	const resolvedNodePath = (0,external_node_path_namespaceObject.resolve)(cwd, normalizedNodePath);
+	const resolvedNodePath = external_node_path_namespaceObject.resolve(cwd, normalizedNodePath);
 	const newOptions = {
 		...options,
 		nodePath: resolvedNodePath,
@@ -34493,7 +34626,7 @@ const handleNodeOption = (file, commandArguments, {
 		return [file, commandArguments, newOptions];
 	}
 
-	if ((0,external_node_path_namespaceObject.basename)(file, '.exe') === 'node') {
+	if (external_node_path_namespaceObject.basename(file, '.exe') === 'node') {
 		throw new TypeError('When the "node" option is true, the first argument does not need to be "node".');
 	}
 
@@ -34613,7 +34746,7 @@ const serializeEncoding = encoding => typeof encoding === 'string' ? `"${encodin
 // Normalize `cwd` option
 const normalizeCwd = (cwd = getDefaultCwd()) => {
 	const cwdString = safeNormalizeFileUrl(cwd, 'The "cwd" option');
-	return (0,external_node_path_namespaceObject.resolve)(cwdString);
+	return external_node_path_namespaceObject.resolve(cwdString);
 };
 
 const getDefaultCwd = () => {
@@ -34683,7 +34816,7 @@ const normalizeOptions = (filePath, rawArguments, rawOptions) => {
 	options.forceKillAfterDelay = normalizeForceKillAfterDelay(options.forceKillAfterDelay);
 	options.lines = options.lines.map((lines, fdNumber) => lines && !BINARY_ENCODINGS.has(options.encoding) && options.buffer[fdNumber]);
 
-	if (external_node_process_namespaceObject.platform === 'win32' && (0,external_node_path_namespaceObject.basename)(file, '.exe') === 'cmd') {
+	if (external_node_process_namespaceObject.platform === 'win32' && external_node_path_namespaceObject.basename(file, '.exe') === 'cmd') {
 		// #116
 		commandArguments.unshift('/q');
 	}
@@ -35098,6 +35231,7 @@ class MaxBufferError extends Error {
 
 
 
+
 // When the `maxBuffer` option is hit, a MaxBufferError is thrown.
 // The stream is aborted, then specific information is kept for the error message.
 const handleMaxBuffer = ({error, stream, readableObjectMode, lines, encoding, fdNumber}) => {
@@ -35156,11 +35290,12 @@ const getMaxBufferInfo = (error, maxBuffer) => {
 	const {maxBufferInfo: {fdNumber, unit}} = error;
 	delete error.maxBufferInfo;
 
+	const threshold = getFdSpecificValue(maxBuffer, fdNumber);
 	if (fdNumber === 'ipc') {
-		return {streamName: 'IPC output', threshold: maxBuffer.at(-1), unit: 'messages'};
+		return {streamName: 'IPC output', threshold, unit: 'messages'};
 	}
 
-	return {streamName: getStreamName(fdNumber), threshold: maxBuffer[fdNumber], unit};
+	return {streamName: getStreamName(fdNumber), threshold, unit};
 };
 
 // The only way to apply `maxBuffer` with `spawnSync()` is to use the native `maxBuffer` option Node.js provides.
@@ -35716,15 +35851,16 @@ function prettyMilliseconds(milliseconds, options) {
 ;// CONCATENATED MODULE: ./node_modules/execa/lib/verbose/error.js
 
 
-
-// When `verbose` is `short|full`, print each command's error when it fails
-const logError = ({message, failed, reject, verboseId, icon}) => {
-	if (!failed) {
-		return;
+// When `verbose` is `short|full|custom`, print each command's error when it fails
+const logError = (result, verboseInfo) => {
+	if (result.failed) {
+		verboseLog({
+			type: 'error',
+			verboseMessage: result.shortMessage,
+			verboseInfo,
+			result,
+		});
 	}
-
-	const color = reject ? redBright : yellowBright;
-	verboseLog(message, verboseId, icon, color);
 };
 
 ;// CONCATENATED MODULE: ./node_modules/execa/lib/verbose/complete.js
@@ -35733,58 +35869,24 @@ const logError = ({message, failed, reject, verboseId, icon}) => {
 
 
 
-
-
-
-// When `verbose` is `short|full`, print each command's completion, duration and error
-const logFinalResult = ({shortMessage, failed, durationMs}, reject, verboseInfo) => {
-	logResult({
-		message: shortMessage,
-		failed,
-		reject,
-		durationMs,
-		verboseInfo,
-	});
-};
-
-// Same but for early validation errors
-const logEarlyResult = (error, startTime, verboseInfo) => {
-	logResult({
-		message: escapeLines(String(error)),
-		failed: true,
-		reject: true,
-		durationMs: getDurationMs(startTime),
-		verboseInfo,
-	});
-};
-
-const logResult = ({message, failed, reject, durationMs, verboseInfo: {verbose, verboseId}}) => {
-	if (!isVerbose(verbose)) {
+// When `verbose` is `short|full|custom`, print each command's completion, duration and error
+const logResult = (result, verboseInfo) => {
+	if (!isVerbose(verboseInfo)) {
 		return;
 	}
 
-	const icon = getIcon(failed, reject);
-	logError({
-		message,
-		failed,
-		reject,
-		verboseId,
-		icon,
+	logError(result, verboseInfo);
+	logDuration(result, verboseInfo);
+};
+
+const logDuration = (result, verboseInfo) => {
+	const verboseMessage = `(done in ${prettyMilliseconds(result.durationMs)})`;
+	verboseLog({
+		type: 'duration',
+		verboseMessage,
+		verboseInfo,
+		result,
 	});
-	logDuration(durationMs, verboseId, icon);
-};
-
-const logDuration = (durationMs, verboseId, icon) => {
-	const durationMessage = `(done in ${prettyMilliseconds(durationMs)})`;
-	verboseLog(durationMessage, verboseId, icon, gray);
-};
-
-const getIcon = (failed, reject) => {
-	if (!failed) {
-		return 'success';
-	}
-
-	return reject ? 'error' : 'warning';
 };
 
 ;// CONCATENATED MODULE: ./node_modules/execa/lib/return/reject.js
@@ -35793,7 +35895,7 @@ const getIcon = (failed, reject) => {
 // Applies the `reject` option.
 // Also print the final log line with `verbose`.
 const handleResult = (result, verboseInfo, {reject}) => {
-	logFinalResult(result, reject, verboseInfo);
+	logResult(result, verboseInfo);
 
 	if (result.failed && reject) {
 		throw result;
@@ -36215,12 +36317,13 @@ const normalizeIpcStdioArray = (stdioArray, ipc) => ipc && !stdioArray.includes(
 
 
 
+
 // Add support for `stdin`/`stdout`/`stderr` as an alias for `stdio`.
 // Also normalize the `stdio` option.
-const normalizeStdioOption = ({stdio, ipc, buffer, verbose, ...options}, isSync) => {
+const normalizeStdioOption = ({stdio, ipc, buffer, ...options}, verboseInfo, isSync) => {
 	const stdioArray = getStdioArray(stdio, options).map((stdioOption, fdNumber) => stdio_option_addDefaultValue(stdioOption, fdNumber));
 	return isSync
-		? normalizeStdioSync(stdioArray, buffer, verbose)
+		? normalizeStdioSync(stdioArray, buffer, verboseInfo)
 		: normalizeIpcStdioArray(stdioArray, ipc);
 };
 
@@ -36261,10 +36364,10 @@ const stdio_option_addDefaultValue = (stdioOption, fdNumber) => {
 
 // Using `buffer: false` with synchronous methods implies `stdout`/`stderr`: `ignore`.
 // Unless the output is needed, e.g. due to `verbose: 'full'` or to redirecting to a file.
-const normalizeStdioSync = (stdioArray, buffer, verbose) => stdioArray.map((stdioOption, fdNumber) =>
+const normalizeStdioSync = (stdioArray, buffer, verboseInfo) => stdioArray.map((stdioOption, fdNumber) =>
 	!buffer[fdNumber]
 	&& fdNumber !== 0
-	&& verbose[fdNumber] !== 'full'
+	&& !isFullVerbose(verboseInfo, fdNumber)
 	&& isOutputPipeOnly(stdioOption)
 		? 'ignore'
 		: stdioOption);
@@ -36560,7 +36663,7 @@ const throwOnDuplicateStream = (stdioItem, optionName, type) => {
 // They are converted into an array of `fileDescriptors`.
 // Each `fileDescriptor` is normalized, validated and contains all information necessary for further handling.
 const handleStdio = (addProperties, options, verboseInfo, isSync) => {
-	const stdio = normalizeStdioOption(options, isSync);
+	const stdio = normalizeStdioOption(options, verboseInfo, isSync);
 	const initialFileDescriptors = stdio.map((stdioOption, fdNumber) => getFileDescriptor({
 		stdioOption,
 		fdNumber,
@@ -37307,13 +37410,14 @@ const validateSerializable = newContents => {
 
 
 
+
 // `ignore` opts-out of `verbose` for a specific stream.
 // `ipc` cannot use piping.
 // `inherit` would result in double printing.
 // They can also lead to double printing when passing file descriptor integers or `process.std*`.
 // This only leaves with `pipe` and `overlapped`.
-const shouldLogOutput = ({stdioItems, encoding, verboseInfo: {verbose}, fdNumber}) => fdNumber !== 'all'
-	&& verbose[fdNumber] === 'full'
+const shouldLogOutput = ({stdioItems, encoding, verboseInfo, fdNumber}) => fdNumber !== 'all'
+	&& isFullVerbose(verboseInfo, fdNumber)
 	&& !BINARY_ENCODINGS.has(encoding)
 	&& fdUsesVerbose(fdNumber)
 	&& (stdioItems.some(({type, value}) => type === 'native' && PIPED_STDIO_VALUES.has(value))
@@ -37328,18 +37432,18 @@ const fdUsesVerbose = fdNumber => fdNumber === 1 || fdNumber === 2;
 const PIPED_STDIO_VALUES = new Set(['pipe', 'overlapped']);
 
 // `verbose: 'full'` printing logic with async methods
-const logLines = async (linesIterable, stream, verboseInfo) => {
+const logLines = async (linesIterable, stream, fdNumber, verboseInfo) => {
 	for await (const line of linesIterable) {
 		if (!isPipingStream(stream)) {
-			logLine(line, verboseInfo);
+			logLine(line, fdNumber, verboseInfo);
 		}
 	}
 };
 
 // `verbose: 'full'` printing logic with sync methods
-const logLinesSync = (linesArray, verboseInfo) => {
+const logLinesSync = (linesArray, fdNumber, verboseInfo) => {
 	for (const line of linesArray) {
-		logLine(line, verboseInfo);
+		logLine(line, fdNumber, verboseInfo);
 	}
 };
 
@@ -37353,8 +37457,14 @@ const logLinesSync = (linesArray, verboseInfo) => {
 const isPipingStream = stream => stream._readableState.pipes.length > 0;
 
 // When `verbose` is `full`, print stdout|stderr
-const logLine = (line, {verboseId}) => {
-	verboseLog(serializeLogMessage(line), verboseId, 'output');
+const logLine = (line, fdNumber, verboseInfo) => {
+	const verboseMessage = serializeVerboseMessage(line);
+	verboseLog({
+		type: 'output',
+		verboseMessage,
+		fdNumber,
+		verboseInfo,
+	});
 };
 
 ;// CONCATENATED MODULE: ./node_modules/execa/lib/io/output-sync.js
@@ -37408,15 +37518,15 @@ const transformOutputResultSync = (
 		fdNumber,
 	});
 
-	if (shouldLogOutput({
-		stdioItems,
-		encoding,
-		verboseInfo,
+	logOutputSync({
+		serializedResult,
 		fdNumber,
-	})) {
-		const linesArray = splitLinesSync(serializedResult, false, objectMode);
-		logLinesSync(linesArray, verboseInfo);
-	}
+		state,
+		verboseInfo,
+		encoding,
+		stdioItems,
+		objectMode,
+	});
 
 	const returnedResult = buffer[fdNumber] ? finalResult : undefined;
 
@@ -37460,6 +37570,25 @@ const serializeChunks = ({chunks, objectMode, encoding, lines, stripFinalNewline
 	}
 
 	return {serializedResult};
+};
+
+const logOutputSync = ({serializedResult, fdNumber, state, verboseInfo, encoding, stdioItems, objectMode}) => {
+	if (!shouldLogOutput({
+		stdioItems,
+		encoding,
+		verboseInfo,
+		fdNumber,
+	})) {
+		return;
+	}
+
+	const linesArray = splitLinesSync(serializedResult, false, objectMode);
+
+	try {
+		logLinesSync(linesArray, fdNumber, verboseInfo);
+	} catch (error) {
+		state.error ??= error;
+	}
 };
 
 // When the `std*` target is a file path/URL or a file descriptor
@@ -37607,7 +37736,6 @@ const getResultError = (error, exitCode, signal) => {
 
 
 
-
 // Main shared logic for all sync methods: `execaSync()`, `$.sync()`
 const execaCoreSync = (rawFile, rawArguments, rawOptions) => {
 	const {file, commandArguments, command, escapedCommand, startTime, verboseInfo, options, fileDescriptors} = handleSyncArguments(rawFile, rawArguments, rawOptions);
@@ -37627,26 +37755,20 @@ const execaCoreSync = (rawFile, rawArguments, rawOptions) => {
 // Compute arguments to pass to `child_process.spawnSync()`
 const handleSyncArguments = (rawFile, rawArguments, rawOptions) => {
 	const {command, escapedCommand, startTime, verboseInfo} = handleCommand(rawFile, rawArguments, rawOptions);
-
-	try {
-		const syncOptions = normalizeSyncOptions(rawOptions);
-		const {file, commandArguments, options} = normalizeOptions(rawFile, rawArguments, syncOptions);
-		validateSyncOptions(options);
-		const fileDescriptors = handleStdioSync(options, verboseInfo);
-		return {
-			file,
-			commandArguments,
-			command,
-			escapedCommand,
-			startTime,
-			verboseInfo,
-			options,
-			fileDescriptors,
-		};
-	} catch (error) {
-		logEarlyResult(error, startTime, verboseInfo);
-		throw error;
-	}
+	const syncOptions = normalizeSyncOptions(rawOptions);
+	const {file, commandArguments, options} = normalizeOptions(rawFile, rawArguments, syncOptions);
+	validateSyncOptions(options);
+	const fileDescriptors = handleStdioSync(options, verboseInfo);
+	return {
+		file,
+		commandArguments,
+		command,
+		escapedCommand,
+		startTime,
+		verboseInfo,
+		options,
+		fileDescriptors,
+	};
 };
 
 // Options normalization logic specific to sync methods
@@ -39438,26 +39560,19 @@ const getGenerators = ({binary, shouldEncode, encoding, shouldSplit, preserveNew
 
 
 // Retrieve `result.stdout|stderr|all|stdio[*]`
-const getStreamOutput = async ({stream, onStreamEnd, fdNumber, encoding, buffer, maxBuffer, lines, allMixed, stripFinalNewline, verboseInfo, streamInfo: {fileDescriptors}}) => {
-	if (shouldLogOutput({
-		stdioItems: fileDescriptors[fdNumber]?.stdioItems,
-		encoding,
-		verboseInfo,
+const getStreamOutput = async ({stream, onStreamEnd, fdNumber, encoding, buffer, maxBuffer, lines, allMixed, stripFinalNewline, verboseInfo, streamInfo}) => {
+	const logPromise = logOutputAsync({
+		stream,
+		onStreamEnd,
 		fdNumber,
-	})) {
-		const linesIterable = iterateForResult({
-			stream,
-			onStreamEnd,
-			lines: true,
-			encoding,
-			stripFinalNewline: true,
-			allMixed,
-		});
-		logLines(linesIterable, stream, verboseInfo);
-	}
+		encoding,
+		allMixed,
+		verboseInfo,
+		streamInfo,
+	});
 
 	if (!buffer) {
-		await resumeStream(stream);
+		await Promise.all([resumeStream(stream), logPromise]);
 		return;
 	}
 
@@ -39470,14 +39585,39 @@ const getStreamOutput = async ({stream, onStreamEnd, fdNumber, encoding, buffer,
 		stripFinalNewline: stripFinalNewlineValue,
 		allMixed,
 	});
-	return contents_getStreamContents({
-		stream,
-		iterable,
-		fdNumber,
+	const [output] = await Promise.all([
+		contents_getStreamContents({
+			stream,
+			iterable,
+			fdNumber,
+			encoding,
+			maxBuffer,
+			lines,
+		}),
+		logPromise,
+	]);
+	return output;
+};
+
+const logOutputAsync = async ({stream, onStreamEnd, fdNumber, encoding, allMixed, verboseInfo, streamInfo: {fileDescriptors}}) => {
+	if (!shouldLogOutput({
+		stdioItems: fileDescriptors[fdNumber]?.stdioItems,
 		encoding,
-		maxBuffer,
-		lines,
+		verboseInfo,
+		fdNumber,
+	})) {
+		return;
+	}
+
+	const linesIterable = iterateForResult({
+		stream,
+		onStreamEnd,
+		lines: true,
+		encoding,
+		stripFinalNewline: true,
+		allMixed,
 	});
+	await logLines(linesIterable, stream, fdNumber, verboseInfo);
 };
 
 // When using `buffer: false`, users need to read `subprocess.stdout|stderr|all` right away
@@ -39726,14 +39866,22 @@ const getAllMixed = ({all, stdout, stderr}) => all
 ;// CONCATENATED MODULE: ./node_modules/execa/lib/verbose/ipc.js
 
 
-// When `verbose` is `'full'`, print IPC messages from the subprocess
-const shouldLogIpc = ({verbose}) => verbose.at(-1) === 'full';
 
-const logIpcOutput = (message, {verboseId}) => {
-	verboseLog(serializeLogMessage(message), verboseId, 'ipc');
+// When `verbose` is `'full'`, print IPC messages from the subprocess
+const shouldLogIpc = verboseInfo => isFullVerbose(verboseInfo, 'ipc');
+
+const logIpcOutput = (message, verboseInfo) => {
+	const verboseMessage = serializeVerboseMessage(message);
+	verboseLog({
+		type: 'ipc',
+		verboseMessage,
+		fdNumber: 'ipc',
+		verboseInfo,
+	});
 };
 
 ;// CONCATENATED MODULE: ./node_modules/execa/lib/ipc/buffer-messages.js
+
 
 
 
@@ -39752,8 +39900,8 @@ const waitForIpcOutput = async ({
 	}
 
 	const isVerbose = shouldLogIpc(verboseInfo);
-	const buffer = bufferArray.at(-1);
-	const maxBuffer = maxBufferArray.at(-1);
+	const buffer = getFdSpecificValue(bufferArray, 'ipc');
+	const maxBuffer = getFdSpecificValue(maxBufferArray, 'ipc');
 
 	for await (const message of loopOnMessages({
 		anyProcess: subprocess,
@@ -40362,7 +40510,6 @@ const descriptors = ['then', 'catch', 'finally'].map(property => [
 
 
 
-
 // Main shared logic for all async methods: `execa()`, `$`, `execaNode()`
 const execaCoreAsync = (rawFile, rawArguments, rawOptions, createNested) => {
 	const {file, commandArguments, command, escapedCommand, startTime, verboseInfo, options, fileDescriptors} = handleAsyncArguments(rawFile, rawArguments, rawOptions);
@@ -40390,25 +40537,19 @@ const execaCoreAsync = (rawFile, rawArguments, rawOptions, createNested) => {
 // Compute arguments to pass to `child_process.spawn()`
 const handleAsyncArguments = (rawFile, rawArguments, rawOptions) => {
 	const {command, escapedCommand, startTime, verboseInfo} = handleCommand(rawFile, rawArguments, rawOptions);
-
-	try {
-		const {file, commandArguments, options: normalizedOptions} = normalizeOptions(rawFile, rawArguments, rawOptions);
-		const options = handleAsyncOptions(normalizedOptions);
-		const fileDescriptors = handleStdioAsync(options, verboseInfo);
-		return {
-			file,
-			commandArguments,
-			command,
-			escapedCommand,
-			startTime,
-			verboseInfo,
-			options,
-			fileDescriptors,
-		};
-	} catch (error) {
-		logEarlyResult(error, startTime, verboseInfo);
-		throw error;
-	}
+	const {file, commandArguments, options: normalizedOptions} = normalizeOptions(rawFile, rawArguments, rawOptions);
+	const options = handleAsyncOptions(normalizedOptions);
+	const fileDescriptors = handleStdioAsync(options, verboseInfo);
+	return {
+		file,
+		commandArguments,
+		command,
+		escapedCommand,
+		startTime,
+		verboseInfo,
+		options,
+		fileDescriptors,
+	};
 };
 
 // Options normalization logic specific to async methods.
